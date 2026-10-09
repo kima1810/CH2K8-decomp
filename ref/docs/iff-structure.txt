@@ -1,0 +1,50 @@
+TITLE: Structure of NBA2K9 IFF
+AUTHOR: hades
+DATE: 2008-12-19,22:36
+LINK: http://hades.net.cn/post/nba2k9_iff_format.html
+
+typedef struct {
+    IFF_HEADER iffHeader;
+    IFF_MAINDATA iffHadesData[dwDataFileCount];
+} IFF_FILE;
+
+typedef struct {
+    DWORD dwMagic; --[F0 98 50 30] for type 2 or [FF 3B EF 94] for type 1
+    DWORD dwSize;
+    DWORD dwFileLen;
+    DWORD dwReserve;
+    DWORD dwDataFileCount;
+    DWORD dwUnknow1;
+    DWORD dwSubFileCount;
+    DWORD dwUnknow2;
+    IFF_HEADER_DATA ihdData[dwDataFileCount];
+    DWORD dwSubFile[dwSubFileCount];
+    IFF_HEADER_SUB ihdSub[dwSubFileCount];
+} IFF_HEADER;
+
+typedef struct {
+    DWORD dwName;
+    DWORD dwType;
+    DWORD dwUnknow1;
+    DWORD dwUnCompressLen;
+    DWORD dwUnknow2;
+    DWORD dwStartOffset;
+    DWORD dwCompressLen;
+    DWORD dwReserve;
+} IFF_HEADER_DATA;
+
+typedef struct {
+    DWORD dwName;
+    DWORD dwType;
+    DWORD dwSubCount;
+    DWORD dwOffset[dwSubCount];
+} IFF_HEADER_SUB;
+
+typedef struct {
+    DWORD dwFlag;
+    DWORD dwUnCompressLen; //reverse
+    DWORD dwCompressLen; //reverse
+    DWORD dwUnknow1;
+    DWORD dwHades;
+    BYTE btData[dwCompressLen-20]; //compressed
+} IFF_MAINDATA;
