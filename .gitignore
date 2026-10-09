@@ -1,0 +1,17 @@
+# Source material and generated data — never commit (Hard Rule 2)
+ref/
+work/
+out/
+*.elf
+*.self
+*.bin
+*.BIN
+*.iff
+*.cdf
+*.sprx
+*.prx
+*.gtf
+*.dds
+__pycache__/
+*.pyc
+.pytest_cache/
