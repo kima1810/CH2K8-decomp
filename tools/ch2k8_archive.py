@@ -215,6 +215,155 @@ def sniff(data: bytes) -> str:
     return KNOWN_MAGICS.get(data[:4], "unknown")
 
 
+# ---------------------------------------------------------------- rebuild
+#
+# The retail layout is tight: every entry starts on an alignment boundary
+# directly after the previous one (gap == align_up(size)), padding is zero,
+# and data starts at the first boundary after the TOC. [CONFIRMED on JB dump]
+# Rebuilding keeps the original offset order and TOC (hash) order, so an
+# unmodified rebuild is byte-identical; replaced entries may grow or shrink
+# and everything after them moves.
+
+CHUNK = 8 << 20
+DEFAULT_PART_UNITS = 0x80000  # 1 GiB, as in 0A..0D
+
+
+def align_up(n: int, a: int) -> int:
+    return -(-n // a) * a
+
+
+def part_raw_name(i: int) -> bytes:
+    # Names past the retail "0E" follow the same pattern. [GUESS] whether the
+    # game opens parts by descriptor name or by a hardcoded list is unknown.
+    return f"0{chr(ord('A') + i)}".encode("utf-16-be").ljust(8, b"\0")
+
+
+@dataclass
+class Placement:
+    entry: Entry           # original entry (offset/size in the source archive)
+    offset: int            # new logical byte offset
+    size: int              # new byte size
+    source: Path | None    # replacement file, or None to copy the original bytes
+
+
+def plan_rebuild(a: Archive, replace: dict[int, Path]) -> tuple[Archive, list[Placement]]:
+    """Lay out a new archive; returns its header model and the data placements."""
+    unknown = set(replace) - {e.hash for e in a.entries}
+    if unknown:
+        raise SystemExit("replacement not in TOC: " + ", ".join(f"{h:08X}" for h in sorted(unknown)))
+    sizes = {e.hash: e.size for e in a.entries}
+    for h, p in replace.items():
+        sizes[h] = p.stat().st_size
+    max_units = a.parts[0].units if a.part_count > 1 else DEFAULT_PART_UNITS
+    part_count = a.part_count
+    while True:  # header length depends on part_count, which depends on layout
+        pos = align_up(HEADER.size + part_count * PART.size + len(a.entries) * TOC.size, a.alignment)
+        placements = []
+        for e in sorted(a.entries, key=lambda e: e.offset):
+            placements.append(Placement(e, pos, sizes[e.hash], replace.get(e.hash)))
+            pos += align_up(sizes[e.hash], a.alignment)
+        total_units = pos // a.alignment
+        units = [max_units] * (total_units // max_units)
+        if total_units % max_units:
+            units.append(total_units % max_units)
+        if len(units) == part_count:
+            break
+        part_count = len(units)
+
+    parts = []
+    for i, u in enumerate(units):
+        old = a.parts[i] if i < len(a.parts) else None
+        raw = old.raw_name if old else part_raw_name(i)
+        parts.append(Part(raw.decode("utf-16-be").rstrip("\0"), u, old.unknown if old else 0, raw))
+    new_off = {pl.entry.hash: pl for pl in placements}
+    entries = []
+    for e in a.entries:  # TOC order (hash-sorted) is preserved
+        pl = new_off[e.hash]
+        entries.append(Entry(e.index, e.hash, pl.offset // a.alignment, e.unknown, pl.size,
+                             pl.offset, align_up(pl.size, a.alignment), name=e.name))
+    new = Archive(a.root, a.magic, a.alignment, len(parts), a.reserved0, len(entries),
+                  a.reserved1, parts, entries)
+    return new, placements
+
+
+def iter_rebuilt(a: Archive, new: Archive, placements: list[Placement]):
+    """Yield the rebuilt logical space as byte chunks."""
+    head = new.serialize_header()
+    yield head
+    pos = len(head)
+    for pl in placements:
+        if pl.offset > pos:
+            yield bytes(pl.offset - pos)
+        pos = pl.offset
+        if pl.source is None:
+            done = 0
+            while done < pl.size:
+                n = min(CHUNK, pl.size - done)
+                yield a.read(pl.entry.offset + done, n)
+                done += n
+        else:
+            done = 0
+            with pl.source.open("rb") as f:
+                while chunk := f.read(CHUNK):
+                    done += len(chunk)
+                    yield chunk
+            if done != pl.size:
+                raise SystemExit(f"{pl.source} changed size while reading")
+        pos += pl.size
+    if new.total > pos:
+        yield bytes(new.total - pos)
+
+
+def write_parts(root: Path, parts: list[Part], chunks) -> None:
+    """Split a logical byte stream across part files."""
+    it = iter(chunks)
+    buf = b""
+    for p in parts:
+        need = p.units * 0x800
+        with (root / p.name).open("xb") as f:  # never overwrite
+            while need:
+                if not buf:
+                    buf = next(it)
+                n = min(need, len(buf))
+                f.write(buf[:n])
+                buf = buf[n:]
+                need -= n
+    if buf or next(it, b""):
+        raise SystemExit("rebuilt stream longer than part table")
+
+
+def compare_stream(a: Archive, chunks) -> int | None:
+    """Return the first differing logical offset vs the source archive, or None."""
+    pos = 0
+    for chunk in chunks:
+        if pos + len(chunk) > a.total:
+            return a.total
+        orig = a.read(pos, len(chunk))
+        if orig != chunk:
+            return pos + next(i for i, (x, y) in enumerate(zip(orig, chunk)) if x != y)
+        pos += len(chunk)
+    return None if pos == a.total else pos
+
+
+def parse_replacements(files: list[Path], dirs: list[Path]) -> dict[int, Path]:
+    """Map name hash -> file. Accepts real filenames, or the extract fallback
+    name for unresolved entries ("00012_ABCD1234.bin")."""
+    paths = list(files)
+    for d in dirs:
+        paths += sorted(p for p in d.iterdir() if p.is_file())
+    out: dict[int, Path] = {}
+    for p in paths:
+        stem = p.stem
+        if len(stem) == 14 and stem[5] == "_" and stem[:5].isdigit():
+            h = int(stem[6:], 16)
+        else:
+            h = name_hash(p.name)
+        if h in out:
+            raise SystemExit(f"two replacements for {h:08X}: {out[h]} and {p}")
+        out[h] = p
+    return out
+
+
 # ---------------------------------------------------------------- commands
 
 def cmd_info(a: Archive, args) -> None:
@@ -284,6 +433,41 @@ def cmd_extract(a: Archive, args) -> None:
         print(f"{e.index:5} {fn.name:32} {size:>10}  sha256={hashlib.sha256(data).hexdigest()[:16]}")
 
 
+def cmd_rebuild(a: Archive, args) -> None:
+    replace = parse_replacements(args.replace, args.replace_dir)
+    new, placements = plan_rebuild(a, replace)
+    moved = sum(1 for pl in placements if pl.offset != pl.entry.offset)
+    print(f"replacements  {len(replace)}")
+    for pl in placements:
+        if pl.source:
+            print(f"  {pl.entry.name or f'{pl.entry.hash:08X}':32} {pl.entry.size:>10} -> {pl.size:>10}")
+    print(f"moved entries {moved} / {len(placements)}")
+    print(f"parts         {a.part_count} -> {new.part_count}  "
+          f"({', '.join(f'{p.name}={p.units:#x}' for p in new.parts)})")
+    if new.part_count != a.part_count:
+        print("WARNING: part count changed; whether the game honors the descriptor table is unverified")
+    if args.check:
+        diff = compare_stream(a, iter_rebuilt(a, new, placements))
+        print("rebuild vs source: " + ("IDENTICAL" if diff is None else f"DIFFERS at {diff:#x}"))
+        sys.exit(0 if diff is None else 1)
+    out = Path(args.output)
+    if out.resolve() == a.root.resolve():
+        raise SystemExit("output must not be the source USRDIR")
+    out.mkdir(parents=True, exist_ok=True)
+    clash = [p.name for p in new.parts if (out / p.name).exists()]
+    if clash:
+        raise SystemExit(f"refusing to overwrite {', '.join(clash)} in {out}")
+    write_parts(out, new.parts, iter_rebuilt(a, new, placements))
+    b = open_archive(out)
+    ok = b.serialize_header() == new.serialize_header() and not any(e.size_flag for e in b.entries)
+    for pl in placements:
+        if pl.source:
+            e = next(x for x in b.entries if x.hash == pl.entry.hash)
+            ok &= b.read(e.offset, e.size) == pl.source.read_bytes()
+    print(f"wrote {out}  readback {'OK' if ok else 'FAILED'}")
+    sys.exit(0 if ok else 1)
+
+
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("usrdir", type=Path, help="USRDIR (or a parent) containing 0A..0E")
@@ -301,9 +485,21 @@ def main(argv=None) -> None:
     p.add_argument("--name", nargs="*")
     p.add_argument("--full-extent", action="store_true",
                    help="extract up to the next entry (includes padding)")
+    p = sub.add_parser("rebuild", help="write a new 0A.. archive, optionally replacing entries "
+                                       "(entries may grow/shrink; later entries are relocated)")
+    p.add_argument("-o", "--output", help="output directory for the new parts")
+    p.add_argument("--replace", type=Path, nargs="*", default=[],
+                   help="replacement files, matched by filename hash (or NNNNN_HASH.bin)")
+    p.add_argument("--replace-dir", type=Path, action="append", default=[],
+                   help="directory of replacement files (non-recursive)")
+    p.add_argument("--check", action="store_true",
+                   help="don't write; compare the rebuilt stream with the source archive")
     args = ap.parse_args(argv)
+    if args.cmd == "rebuild" and not (args.check or args.output):
+        ap.error("rebuild needs -o or --check")
     a = open_archive(args.usrdir, load_names(args.names))
-    {"info": cmd_info, "verify": cmd_verify, "list": cmd_list, "extract": cmd_extract}[args.cmd](a, args)
+    {"info": cmd_info, "verify": cmd_verify, "list": cmd_list, "extract": cmd_extract,
+     "rebuild": cmd_rebuild}[args.cmd](a, args)
 
 
 if __name__ == "__main__":
