@@ -35,7 +35,7 @@ Use in code comments, Ghidra names, and findings docs:
 - **Executable:** `EBOOT.BIN` is an encrypted SELF. Analysis requires the decrypted ELF. System library calls go through imports identified by **NIDs** (FNIDs), so resolve them with a NID database before naming anything.
 - **Graphics:** RSX (NV47-derived) via libgcm. Shaders are compiled Cg; PC port will need translation or replacement.
 - **Reference build:** NBA 2K9 PC is 32-bit x86/D3D9. Cross-arch, so byte-level diffing won't work; match via **strings, constants, magic numbers, table layouts, call-graph shape, and file formats**.
-- **Note:** CH2K8 also shipped on Xbox 360. If the PS3 path stalls (especially on SPU code), flag it; 360 PPC-only code may be more tractable for static recompilation.
+- **Decided 2026-10-22:** the PC port recompiles the **Xbox 360 XEX** (XenonRecomp/ReXGlue), not the PS3 EBOOT. The PS3 dump remains the asset reference. See `docs/port_strategy.md`.
 
 ## Toolchain (prefer existing tools; check `ref/docs/links.md` first)
 - **Static analysis:** Ghidra with a PS3 ELF/PRX loader plugin (PPC64 big-endian, Cell). Use headless Ghidra scripts (Python/Java) for anything repeatable.
