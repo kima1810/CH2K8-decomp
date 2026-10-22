@@ -69,11 +69,13 @@ using the recompiled code as a working reference.
 ## Blockers and risks
 - ~~Need a 360 dump~~: resolved 2026-10-22. `ref/College Hoops 2K8 (USA).7z` is now the 360 ISO.
 - ~~360 data container unknown~~: resolved. It's the same `AA00B3BF` split archive, and the Phase 1 tools work unchanged. See [the 360 inventory](findings/2026-10-22-xbox360-disc-inventory.md).
-- **XEX decryption and decompression** must happen locally (XexTool or Xenia) before Phase 2. The image is encrypted and LZX-compressed, built with XDK 2.0.5632.
+- ~~XEX decryption~~: not needed for codegen, because ReXGlue loads the retail XEX directly. Ghidra still needs a decrypted copy.
+- **Build toolchain** is not installed: CMake, clang 20+, Ninja, MSVC/Windows SDK libraries.
 - **XMA speech banks**: decoding is solved in general, but 2K's bank layout isn't.
 - **Online or 2K Share features** will be stubbed out.
 - **Existing effort**: `kima1810/CH2K8-decomp` claims to be a 360 decompilation. Check it before duplicating work.
 
 ## Decisions log
+- 2026-10-22: `port/` skeleton set up on the SvR 2008 layout. First ReXGlue codegen succeeded (53,803 functions) after adding 8 function starts. See [the codegen findings](findings/2026-10-22-rexglue-first-codegen.md).
 - 2026-10-22: received the 360 ISO. Its asset container matches the PS3's, so Phase 1 work runs on 360 data directly.
 - 2026-10-22: the code target is the Xbox 360 XEX via static recompilation (XenonRecomp/ReXGlue). The PS3 path is shelved for code, and the PS3 dump stays the asset reference.
