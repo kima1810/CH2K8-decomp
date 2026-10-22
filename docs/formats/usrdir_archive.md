@@ -47,7 +47,22 @@ The header, part table and TOC sit at the start of `0A`.
 CHoops-Extractor-Reborn reads +0x0C as alignment units, concludes that "stored sizes can be impossible", and derives sizes from the next offset instead. With +0x0C read as bytes, every entry is consistent and none needs a derived size. Their extraction still works because it reads the whole padded extent.
 
 ### Round-trip
-`ch2k8_archive.py verify` re-serializes the header, part table and TOC from the parsed fields. The result is **byte-identical** (54,120 bytes) on the JB dump. A full archive rebuild (relocating entries) is not implemented yet.
+`ch2k8_archive.py verify` re-serializes the header, part table and TOC from the parsed fields. The result is **byte-identical** (54,120 bytes) on the JB dump.
+
+### Layout rules [CONFIRMED on the JB dump]
+- Data starts at the first alignment boundary after the TOC (`0xD800`). The bytes between the TOC end (`0xD368`) and that boundary are zero.
+- The layout is **tight**: for all 3,376 entries the gap to the next entry is exactly `align_up(size, 0x800)`.
+- Padding after each entry is zero.
+- Parts `0A`..`0D` are full (0x80000 units = 1 GiB), and `0E` holds the remainder.
+
+### Full rebuild
+`ch2k8_archive.py <usrdir> rebuild -o OUT [--replace FILE...] [--replace-dir DIR] [--check]`
+
+- Keeps the original data order and the TOC (hash) order. Replaced entries may grow or shrink, and everything after them moves. Padding is zero.
+- Parts are filled up to the size of the source `0A`. Parts past `0E` are named `0F`, `0G`… [GUESS]. It's unverified whether the game reads the part table or hardcodes the five names, so the tool warns if the part count changes.
+- A replacement file matches by its filename's hash, or by the extract fallback name `NNNNN_HASH.bin` for unresolved entries. Names not in the TOC are rejected, because adding new entries isn't supported.
+- **An unmodified rebuild is byte-identical** to the 4.8 GB source (`--check`, 2026-10-22). Growing `loading.iff` by 4 KiB moved 3,375 entries. All of them read back unchanged, and the new part table was valid (`0E` grew by 2 units).
+- **Not yet boot-tested in RPCS3.** The game might cache offsets, or check sizes or hashes, in ways the format doesn't show.
 
 ## Hex example (JB dump, `0A`)
 
