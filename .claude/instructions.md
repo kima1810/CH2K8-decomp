@@ -6,7 +6,8 @@ Reverse engineer **College Hoops 2K8 (PS3)** to (1) document and tool its file f
 ## Ground Truth — Read These First (every new session)
 | Resource | Path | Use |
 |---|---|---|
-| CH2K8 PS3 dump (JB folder) | `ref/College Hoops 2K8 (USA).7z` | Primary target. `PS3_GAME/USRDIR/` holds `EBOOT.BIN` plus split archive `0A`..`0E` (see `docs/formats/usrdir_archive.md`). Extracted copy: `work/ch2k8/`. |
+| CH2K8 Xbox 360 ISO | `ref/College Hoops 2K8 (USA).7z` (replaced the PS3 dump on 2026-10-22) | **Port target.** XGD2 ISO: `default.xex` plus split archive `0A`..`0M` (see `docs/formats/xdvdfs.md`, `docs/formats/usrdir_archive.md`). Extracted copy: `work/ch2k8/XBOX/` (ISO) and `work/ch2k8/XBOX/disc/` (files). |
+| CH2K8 PS3 dump (JB folder) | `work/ch2k8/PS3/` only (no longer in `ref/`) | Asset cross-reference. `PS3_GAME/USRDIR/` holds `EBOOT.BIN` plus split archive `0A`..`0E`. |
 | NBA 2K9 PC | `ref/Nba 2k9.rar` | Sister title, same Visual Concepts engine era, x86 build. Use to identify engine systems, file formats, and naming. Extracted copy: `work/nba2k9/Nba 2k9/`. |
 | IFF format notes | `ref/docs/iff-structure.txt` | Authoritative starting spec for 2K IFF containers. Extend it; don't contradict it without evidence. |
 | Useful links | `ref/docs/links.md` | Community tools and prior research. Check here before inventing a tool. |

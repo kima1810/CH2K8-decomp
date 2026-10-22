@@ -78,6 +78,21 @@ CHoops-Extractor-Reborn reads +0x0C as alignment units, concludes that "stored s
 00000070: 0000 0000 0000 0030                       unknown 0, size 0x30 bytes
 ```
 
+## Xbox 360 variant [CONFIRMED]
+The 360 disc (XGD2, see [xdvdfs.md](xdvdfs.md)) carries **the same archive format** in its root directory,
+next to `default.xex`. `ch2k8_archive.py` reads it without changes. Its header, part table and TOC round-trip
+byte-identically (54,280 bytes), and `rebuild --check` is IDENTICAL over the full 6.9 GB.
+
+| | PS3 | 360 |
+|---|---|---|
+| Parts | 5 × 1 GiB (`0A`..`0E`) | 13 × 512 MiB (`0A`..`0M`), last part 50,071,552 B |
+| Entries | 3,376 | 3,378 (+`HighlightCreate.iff`, `loading_highlight.iff`) |
+| Payload | 4,806 MB | 6,489 MB |
+| Byte order | BE | BE (same `FF3BEF94` IFF magic) |
+
+This confirms that part names continue alphabetically past `0E` (`0F`..`0M`), which the rebuild tool already assumed.
+The part size is a per-platform choice, and the rebuild tool takes it from the source `0A`.
+
 ## Name resolution
 Hashes are CRC32 over the uppercased filename, so names must come from candidates. Sources, in the order they were added, with cumulative coverage:
 
