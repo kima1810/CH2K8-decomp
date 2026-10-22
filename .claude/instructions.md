@@ -6,7 +6,8 @@ Reverse engineer **College Hoops 2K8 (PS3)** to (1) document and tool its file f
 ## Ground Truth — Read These First (every new session)
 | Resource | Path | Use |
 |---|---|---|
-| CH2K8 PS3 dump (JB folder) | `ref/College Hoops 2K8 (USA).7z` | Primary target. `PS3_GAME/USRDIR/` holds `EBOOT.BIN` plus split archive `0A`..`0E` (see `docs/formats/usrdir_archive.md`). Extracted copy: `work/ch2k8/`. |
+| CH2K8 Xbox 360 ISO | `ref/College Hoops 2K8 (USA).7z` (replaced the PS3 dump on 2026-10-22) | **Port target.** XGD2 ISO: `default.xex` plus split archive `0A`..`0M` (see `docs/formats/xdvdfs.md`, `docs/formats/usrdir_archive.md`). Extracted copy: `work/ch2k8/XBOX/` (ISO) and `work/ch2k8/XBOX/disc/` (files). |
+| CH2K8 PS3 dump (JB folder) | `work/ch2k8/PS3/` only (no longer in `ref/`) | Asset cross-reference. `PS3_GAME/USRDIR/` holds `EBOOT.BIN` plus split archive `0A`..`0E`. |
 | NBA 2K9 PC | `ref/Nba 2k9.rar` | Sister title, same Visual Concepts engine era, x86 build. Use to identify engine systems, file formats, and naming. Extracted copy: `work/nba2k9/Nba 2k9/`. |
 | IFF format notes | `ref/docs/iff-structure.txt` | Authoritative starting spec for 2K IFF containers. Extend it; don't contradict it without evidence. |
 | Useful links | `ref/docs/links.md` | Community tools and prior research. Check here before inventing a tool. |
@@ -35,7 +36,7 @@ Use in code comments, Ghidra names, and findings docs:
 - **Executable:** `EBOOT.BIN` is an encrypted SELF. Analysis requires the decrypted ELF. System library calls go through imports identified by **NIDs** (FNIDs), so resolve them with a NID database before naming anything.
 - **Graphics:** RSX (NV47-derived) via libgcm. Shaders are compiled Cg; PC port will need translation or replacement.
 - **Reference build:** NBA 2K9 PC is 32-bit x86/D3D9. Cross-arch, so byte-level diffing won't work; match via **strings, constants, magic numbers, table layouts, call-graph shape, and file formats**.
-- **Note:** CH2K8 also shipped on Xbox 360. If the PS3 path stalls (especially on SPU code), flag it; 360 PPC-only code may be more tractable for static recompilation.
+- **Decided 2026-10-22:** the PC port recompiles the **Xbox 360 XEX** (XenonRecomp/ReXGlue), not the PS3 EBOOT. The PS3 dump remains the asset reference. See `docs/port_strategy.md`.
 
 ## Toolchain (prefer existing tools; check `ref/docs/links.md` first)
 - **Static analysis:** Ghidra with a PS3 ELF/PRX loader plugin (PPC64 big-endian, Cell). Use headless Ghidra scripts (Python/Java) for anything repeatable.

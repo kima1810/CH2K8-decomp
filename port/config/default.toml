@@ -1,0 +1,12 @@
+# Codegen fixes for default.xex (included from ch2k8_manifest.toml [entrypoint]).
+#
+# Each hook or fix records its evidence and a confidence tag ([CONFIRMED]/[LIKELY]/[GUESS]),
+# as in docs/symbols/symbols.csv. Addresses are guest (PPC) addresses in the 0x82000000 image.
+#
+# Example shape (from the SvR 2008 port):
+#
+# [[midasm_hook]]
+# name = "Ch2k8SomethingHook"
+# address = 0x82XXXXXX
+# registers = ["r3"]
+# after_instruction = true

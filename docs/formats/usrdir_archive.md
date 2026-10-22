@@ -47,7 +47,22 @@ The header, part table and TOC sit at the start of `0A`.
 CHoops-Extractor-Reborn reads +0x0C as alignment units, concludes that "stored sizes can be impossible", and derives sizes from the next offset instead. With +0x0C read as bytes, every entry is consistent and none needs a derived size. Their extraction still works because it reads the whole padded extent.
 
 ### Round-trip
-`ch2k8_archive.py verify` re-serializes the header, part table and TOC from the parsed fields. The result is **byte-identical** (54,120 bytes) on the JB dump. A full archive rebuild (relocating entries) is not implemented yet.
+`ch2k8_archive.py verify` re-serializes the header, part table and TOC from the parsed fields. The result is **byte-identical** (54,120 bytes) on the JB dump.
+
+### Layout rules [CONFIRMED on the JB dump]
+- Data starts at the first alignment boundary after the TOC (`0xD800`). The bytes between the TOC end (`0xD368`) and that boundary are zero.
+- The layout is **tight**: for all 3,376 entries the gap to the next entry is exactly `align_up(size, 0x800)`.
+- Padding after each entry is zero.
+- Parts `0A`..`0D` are full (0x80000 units = 1 GiB), and `0E` holds the remainder.
+
+### Full rebuild
+`ch2k8_archive.py <usrdir> rebuild -o OUT [--replace FILE...] [--replace-dir DIR] [--check]`
+
+- Keeps the original data order and the TOC (hash) order. Replaced entries may grow or shrink, and everything after them moves. Padding is zero.
+- Parts are filled up to the size of the source `0A`. Parts past `0E` are named `0F`, `0G`… [GUESS]. It's unverified whether the game reads the part table or hardcodes the five names, so the tool warns if the part count changes.
+- A replacement file matches by its filename's hash, or by the extract fallback name `NNNNN_HASH.bin` for unresolved entries. Names not in the TOC are rejected, because adding new entries isn't supported.
+- **An unmodified rebuild is byte-identical** to the 4.8 GB source (`--check`, 2026-10-22). Growing `loading.iff` by 4 KiB moved 3,375 entries. All of them read back unchanged, and the new part table was valid (`0E` grew by 2 units).
+- **Not yet boot-tested in RPCS3.** The game might cache offsets, or check sizes or hashes, in ways the format doesn't show.
 
 ## Hex example (JB dump, `0A`)
 
@@ -62,6 +77,21 @@ CHoops-Extractor-Reborn reads +0x0C as alignment units, concludes that "stored s
 00000068:                     0000 f5e6 000d 378e   TOC[0]: hash 0000F5E6, offset 0xD378E units
 00000070: 0000 0000 0000 0030                       unknown 0, size 0x30 bytes
 ```
+
+## Xbox 360 variant [CONFIRMED]
+The 360 disc (XGD2, see [xdvdfs.md](xdvdfs.md)) carries **the same archive format** in its root directory,
+next to `default.xex`. `ch2k8_archive.py` reads it without changes. Its header, part table and TOC round-trip
+byte-identically (54,280 bytes), and `rebuild --check` is IDENTICAL over the full 6.9 GB.
+
+| | PS3 | 360 |
+|---|---|---|
+| Parts | 5 × 1 GiB (`0A`..`0E`) | 13 × 512 MiB (`0A`..`0M`), last part 50,071,552 B |
+| Entries | 3,376 | 3,378 (+`HighlightCreate.iff`, `loading_highlight.iff`) |
+| Payload | 4,806 MB | 6,489 MB |
+| Byte order | BE | BE (same `FF3BEF94` IFF magic) |
+
+This confirms that part names continue alphabetically past `0E` (`0F`..`0M`), which the rebuild tool already assumed.
+The part size is a per-platform choice, and the rebuild tool takes it from the source `0A`.
 
 ## Name resolution
 Hashes are CRC32 over the uppercased filename, so names must come from candidates. Sources, in the order they were added, with cumulative coverage:
