@@ -1,0 +1,17 @@
+# Code addresses referenced from data or built with lis/addi (vtables, callbacks)
+# that analysis did not register as functions. Add entries as codegen or runtime finds them.
+# 8 entries.
+
+[functions]
+# First codegen (ReXGlue 0.10.0.24, 2026-10-22): "UnresolvedCall ... target not in any function".
+# Each is the target of an unconditional `b` (tail call) from the address in the comment.
+# Registered as function starts. [GUESS] They may instead be mid-function labels of a
+# function whose boundary was mis-detected; check in Ghidra before relying on them.
+0x84903E48 = {}  # from b @ 0x848EFD28
+0x84A1C610 = {}  # from b @ 0x84A18AA8
+0x84D44CA4 = {}  # from b @ 0x84D44CCC
+0x84D44F64 = {}  # from b @ 0x84D44F8C
+0x84D453AC = {}  # from b @ 0x84D453CC
+0x84D56958 = {}  # from b @ 0x8470E468
+0x84E26188 = {}  # from b @ 0x84E26FFC
+0x84E295C0 = {}  # from b @ 0x84E29A14

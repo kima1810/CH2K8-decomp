@@ -1,0 +1,9 @@
+# Everything made from the game's code or data: never committed (Hard Rule 2).
+/generated/
+/userdata/
+
+# SDK, build output and logs.
+/sdk/
+/out/
+/logs/
+*.log

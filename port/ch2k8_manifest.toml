@@ -1,0 +1,15 @@
+# College Hoops 2K8 (Xbox 360) - ReXGlue project manifest.
+# Layout follows nefariousjosiah/WWE-SVR2008-RECOMP (svr2008_manifest.toml).
+#
+# Codegen (from this folder):  sdk\bin\rexglue.exe --log-file logs\codegen.log codegen ch2k8_manifest.toml
+# Game data is the user's own disc, extracted with tools/xdvdfs.py; it is never committed.
+
+[project]
+name = "ch2k8"
+sdk_version = "0.10.0"
+game_root = "../work/ch2k8/XBOX/disc"
+
+[entrypoint]
+file_path = "../work/ch2k8/XBOX/disc/default.xex"
+out_directory_path = "generated/default"
+includes = ["config/default.toml", "config/pointer_funcs.toml"]
