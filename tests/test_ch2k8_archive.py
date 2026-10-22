@@ -7,7 +7,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 import ch2k8_archive as ar  # noqa: E402
 
-REAL = Path(__file__).resolve().parents[1] / "work/ch2k8/College Hoops 2K8 (USA)/PS3_GAME/USRDIR"
+REAL = Path(__file__).resolve().parents[1] / "work/ch2k8/PS3/PS3_GAME/USRDIR"
+REAL_360 = Path(__file__).resolve().parents[1] / "work/ch2k8/XBOX/disc"
 
 
 def build_synthetic(root: Path, files: dict[str, bytes], part_units: int = 4):
@@ -125,6 +126,16 @@ def test_name_hash_is_case_insensitive():
 def test_real_header_roundtrip():
     a = ar.open_archive(REAL)
     assert a.magic == ar.MAGIC and a.alignment == 0x800
+    assert a.serialize_header() == a.header_bytes
+    assert [e.hash for e in a.entries] == sorted(e.hash for e in a.entries)
+    assert not any(e.size_flag for e in a.entries)
+
+
+@pytest.mark.skipif(not (REAL_360 / "0A").is_file(), reason="360 disc not extracted to work/")
+def test_real_360_header_roundtrip():
+    a = ar.open_archive(REAL_360)
+    assert a.magic == ar.MAGIC and a.alignment == 0x800
+    assert [p.name for p in a.parts] == [f"0{c}" for c in "ABCDEFGHIJKLM"]
     assert a.serialize_header() == a.header_bytes
     assert [e.hash for e in a.entries] == sorted(e.hash for e in a.entries)
     assert not any(e.size_flag for e in a.entries)
