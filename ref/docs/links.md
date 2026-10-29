@@ -19,6 +19,7 @@ Last updated: 2026-10-22
 | [cruuz/2k-football-mod-tools](https://github.com/cruuz/2k-football-mod-tools) | SoftdrinkTV mod editors for ESPN NFL 2K5 (Xbox) and All-Pro Football 2K8 (Xbox 360): uniforms, rosters, stats. |
 | [cruuz/softdrink-2k28](https://github.com/cruuz/softdrink-2k28) | SoftdrinkTV 2K modding project. |
 | [LeoArtaza/2k5_to_2k8](https://github.com/LeoArtaza/2k5_to_2k8) | Converts ESPN NFL 2K5 rosters into an APF 2K8 import format. |
+| [anishchandra24/NHL2K9-Recompiled](https://github.com/anishchandra24/NHL2K8-Recompiled) | Recompilation of NHL 2K8 for XBOX 260 |
 
 ## 2. Xbox 360 Reverse-Engineering Tooling
 
