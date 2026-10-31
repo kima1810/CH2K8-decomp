@@ -131,3 +131,5 @@ records the subsequent callback repair and the separate rendering symptoms.
 The next attempt reached a different missing callback, `84AB8CA8`; its verified
 global-load/tail-call wrapper is now registered. See the
 [scripted-callback finding](../docs/findings/2026-10-31-scripted-gameplay-callback.md).
+The following attempt reached `848E3A00`; its original flag-bit clearing body
+is registered in the [flag-callback finding](../docs/findings/2026-10-31-gameplay-flag-callback.md).

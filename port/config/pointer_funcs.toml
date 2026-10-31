@@ -1,6 +1,6 @@
 # Code addresses referenced from data or built with lis/addi (vtables, callbacks)
 # that analysis did not register as functions. Add entries as codegen or runtime finds them.
-# 17 entries.
+# 18 entries.
 
 [functions]
 # First codegen (ReXGlue 0.10.0.24, 2026-10-22): "UnresolvedCall ... target not in any function".
@@ -57,3 +57,8 @@
 # starts at 84AB8CB4. All 87 code-pointer candidates in the bounded source
 # data region [8208D000,8208F000) are registered except this entry.
 0x84AB8CA8 = { size = 12 }
+
+# [CONFIRMED] Log 008 reaches this callback. Original five-instruction body
+# loads the object pointer from [r3+0x10], clears bit 0 of [object+0x1C],
+# stores it, then returns. Zero padding begins at 848E3A14.
+0x848E3A00 = { size = 20 }

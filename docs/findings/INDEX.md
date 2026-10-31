@@ -1,5 +1,7 @@
 # Findings index
 
+- [2026-10-31 Gameplay flag callback](2026-10-31-gameplay-flag-callback.md): log 008 reaches `848E3A00`; recovered its flag-bit clearing body and audited 42 nearby code-pointer candidates.
+
 - [2026-10-31 Scripted gameplay callback](2026-10-31-scripted-gameplay-callback.md): the next attempt stops on `84AB8CA8`; verified its global-load/tail-call body and audited 87 code-pointer candidates in the containing data region. Added the sole missing entry; gameplay retry remains required.
 - [2026-10-31 Arena introduction callbacks](2026-10-31-arena-intro-callbacks.md): arena/player/crowd presentation is visible with geometry corruption; crash reaches `848B6FA0`. Audited 185 interleaved records and repaired their two missing targets; gameplay retry remains required.
 - [2026-10-31 Gameplay startup callbacks](2026-10-31-gameplay-startup-callback.md): successive attempts reach unregistered `8471B2F0` and `8471B2E8`; audited their complete 25-entry family, registered four missing thunks in total, and added calling-convention execution checks. Gameplay retry remains required.

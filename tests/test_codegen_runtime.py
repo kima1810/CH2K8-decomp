@@ -174,6 +174,50 @@ def test_generated_arena_callbacks_preserve_both_flag_paths(tmp_path):
     assert execution.returncode == 0, f"Arena callback failed: {execution.returncode}, {execution.stderr}"
 
 
+def test_generated_flag_callback_clears_only_low_bit(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    generated = root / "port/generated/default"
+    sdk = root / "port/sdk/include"
+    compiler = shutil.which("clang++")
+    if sys.platform != "win32" or not compiler or not sdk.is_dir() or not generated.is_dir():
+        pytest.skip("Requires Windows, local ReXGlue SDK, generated game code, and clang++")
+    signature = "DEFINE_REX_FUNC(sub_848E3A00) {"
+    body = None
+    for path in generated.glob("*_recomp.*.cpp"):
+        text = path.read_text(encoding="utf-8")
+        if signature in text:
+            start = text.index(signature)
+            body = text[start:text.index("\n}\n", start) + 3]
+            break
+    assert body is not None
+    assert "{ 0x848E3A00, sub_848E3A00 }" in (generated / "ch2k8_init.cpp").read_text()
+    source = tmp_path / "flag_callback.cpp"
+    executable = tmp_path / "flag_callback.exe"
+    source.write_text(
+        '#include "ch2k8_pch.h"\n' + body
+        + "\nint main() { PPCContext ctx{}; alignas(32) uint8_t memory[256]{};\n"
+        "*reinterpret_cast<uint32_t*>(memory + 0x30) = __builtin_bswap32(0x80u);\n"
+        "const uint32_t values[] = {0, 1, 2, 3, 0x80000001, 0xFFFFFFFF};\n"
+        "for (uint32_t value : values) {\n"
+        "*reinterpret_cast<uint32_t*>(memory + 0x9C) = __builtin_bswap32(value);\n"
+        "memory[0x9B] = 0xAB; memory[0xA0] = 0xCD;\n"
+        "ctx.r3.u64 = 0x20; ctx.r4.u64 = 0xAABB; ctx.lr = 0x12345678;\n"
+        "sub_848E3A00(ctx, memory);\n"
+        "assert(__builtin_bswap32(*reinterpret_cast<uint32_t*>(memory + 0x9C)) == (value & ~1u));\n"
+        "assert(memory[0x9B] == 0xAB && memory[0xA0] == 0xCD);\n"
+        "assert(ctx.r3.u64 == 0x20 && ctx.r4.u64 == 0xAABB && ctx.lr == 0x12345678);\n"
+        "}\n}\n", encoding="utf-8",
+    )
+    compilation = subprocess.run(
+        [compiler, "-std=c++23", "-O2", "-msse4.1", "-DNOMINMAX", "-DWIN32_LEAN_AND_MEAN",
+         "-DSPDLOG_FMT_EXTERNAL", "-DSPDLOG_COMPILED_LIB", "-I", str(sdk), "-I", str(generated),
+         str(source), "-o", str(executable)], capture_output=True, text=True,
+    )
+    assert compilation.returncode == 0, compilation.stderr
+    execution = subprocess.run([str(executable)], capture_output=True, text=True)
+    assert execution.returncode == 0, f"Flag callback failed: {execution.returncode}, {execution.stderr}"
+
+
 def test_generated_script_callback_loads_global_and_tail_calls(tmp_path):
     root = Path(__file__).resolve().parents[1]
     generated = root / "port/generated/default"
