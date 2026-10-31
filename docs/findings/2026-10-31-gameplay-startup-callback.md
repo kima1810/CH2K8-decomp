@@ -1,5 +1,8 @@
 # 2026-10-31: Gameplay startup missing callbacks
 
+Follow-up: the next attempt reaches the arena introduction, then a missing
+callback in a different table. See the [arena-introduction finding](2026-10-31-arena-intro-callbacks.md).
+
 ## Question
 
 Why does the user-confirmed menu build black-screen and terminate when gameplay starts?

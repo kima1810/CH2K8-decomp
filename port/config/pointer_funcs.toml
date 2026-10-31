@@ -1,6 +1,6 @@
 # Code addresses referenced from data or built with lis/addi (vtables, callbacks)
 # that analysis did not register as functions. Add entries as codegen or runtime finds them.
-# 14 entries.
+# 16 entries.
 
 [functions]
 # First codegen (ReXGlue 0.10.0.24, 2026-10-22): "UnresolvedCall ... target not in any function".
@@ -41,3 +41,13 @@
 0x8471B2E8 = { size = 8 }  # -> 0x84718DD0
 0x8471B300 = { size = 8 }  # -> 0x84718EA0
 0x8471B308 = { size = 4 }  # -> 0x84718EC0
+
+# [CONFIRMED] Arena introduction reaches unregistered 0x848B6FA0 in log 006.
+# Raw pointer references locate the interleaved table at [8206FA10,8206FFD8):
+# 185 records / 86 distinct targets. These are its only two registry gaps.
+# F98 moves r6 to r3 and tail-calls 84B85818. FA0 tests bit 0x4000 from
+# [r4+0x18], moves r6 to r3, and tail-calls 84B85808 or 84B85C28.
+# All destinations exist. FA0 ends before zero padding at 848B6FBC.
+# Only FA0 is runtime-observed; F98 is a verified table-referenced sibling.
+0x848B6F98 = { size = 8 }
+0x848B6FA0 = { end = 0x848B6FBC }

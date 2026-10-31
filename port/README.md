@@ -118,8 +118,13 @@ then was deliberately stopped. On 2026-10-31, the user confirmed a successful
 menu boot. A subsequent gameplay-start attempt crashed on missing callback
 `8471B2F0`, then a retry reached the neighboring `8471B2E8`. The full 25-entry
 thunk family has now been audited and its four missing entries registered.
-**Gameplay after the family fix still requires a retry.** Allocation errors and kernel/network
+The next attempt renders an arena introduction with visible geometry artifacts,
+then stops at another missing callback, `848B6FA0`. Its 185-record table region
+has now been audited and both missing entries registered.
+**Interactive gameplay remains unverified; geometry corruption is unresolved.** Allocation errors and kernel/network
 stubs remain in the earlier logs; their resolution has not been established.
 See [the menu-boot finding](../docs/findings/2026-10-31-menu-boot.md).
 See [the gameplay-crash finding](../docs/findings/2026-10-31-gameplay-startup-callback.md)
 for the observed failure and correction.
+The [arena-introduction finding](../docs/findings/2026-10-31-arena-intro-callbacks.md)
+records the subsequent callback repair and the separate rendering symptoms.

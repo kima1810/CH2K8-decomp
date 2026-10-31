@@ -1,5 +1,6 @@
 # Findings index
 
+- [2026-10-31 Arena introduction callbacks](2026-10-31-arena-intro-callbacks.md): arena/player/crowd presentation is visible with geometry corruption; crash reaches `848B6FA0`. Audited 185 interleaved records and repaired their two missing targets; gameplay retry remains required.
 - [2026-10-31 Gameplay startup callbacks](2026-10-31-gameplay-startup-callback.md): successive attempts reach unregistered `8471B2F0` and `8471B2E8`; audited their complete 25-entry family, registered four missing thunks in total, and added calling-convention execution checks. Gameplay retry remains required.
 - [2026-10-31 Menu boot](2026-10-31-menu-boot.md): the user confirms a successful native menu boot; a subsequent gameplay attempt and crash are recorded in the callback finding above.
 - [2026-10-30 Native build + control-flow recovery](2026-10-30-native-build-and-control-flow.md): native build succeeds; resolved 16 fatal fallbacks, recovered 37 switch tables, corrected VMX shifts and incremental builds, and survived a 30-second startup observation. Menu boot was subsequently user-confirmed; gameplay entry failure and its mapping fix are recorded above.

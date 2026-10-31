@@ -116,3 +116,59 @@ def test_generated_gameplay_thunks_preserve_arguments_and_return_path(tmp_path):
     assert compilation.returncode == 0, compilation.stderr
     execution = subprocess.run([str(executable)], capture_output=True, text=True)
     assert execution.returncode == 0, f"Generated thunk failed: {execution.returncode}, {execution.stderr}"
+
+
+def test_generated_arena_callbacks_preserve_both_flag_paths(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    generated = root / "port/generated/default"
+    sdk = root / "port/sdk/include"
+    compiler = shutil.which("clang++")
+    if sys.platform != "win32" or not compiler or not sdk.is_dir() or not generated.is_dir():
+        pytest.skip("Requires Windows, local ReXGlue SDK, generated game code, and clang++")
+    addresses = (0x848B6F98, 0x848B6FA0)
+    bodies = {}
+    for path in generated.glob("*_recomp.*.cpp"):
+        text = path.read_text(encoding="utf-8")
+        for address in addresses:
+            signature = f"DEFINE_REX_FUNC(sub_{address:08X}) {{"
+            if signature in text:
+                start = text.index(signature)
+                bodies[address] = text[start:text.index("\n}\n", start) + 3]
+        if len(bodies) == len(addresses):
+            break
+    assert set(bodies) == set(addresses)
+    mappings = (generated / "ch2k8_init.cpp").read_text(encoding="utf-8")
+    for address in addresses:
+        assert f"{{ 0x{address:08X}, sub_{address:08X} }}" in mappings
+    stubs = []
+    for target in (0x84B85818, 0x84B85808, 0x84B85C28):
+        stubs.append(
+            f'extern "C" void sub_{target:08X}(PPCContext& ctx, uint8_t*) {{ '
+            f"observed = ctx.r3.u64; destination = 0x{target:08X}; ctx.r3.u64 = 0xCAFE; }}"
+        )
+    source = tmp_path / "arena_callbacks.cpp"
+    executable = tmp_path / "arena_callbacks.exe"
+    source.write_text(
+        '#include "ch2k8_pch.h"\nstatic uint64_t observed; static uint32_t destination;\n'
+        + "\n".join(stubs) + "\n" + "\n".join(bodies.values()) + "\n"
+        "int main() { PPCContext ctx{}; alignas(32) uint8_t memory[128]{};\n"
+        "const uint32_t flags[] = {0, 0x4000, 0x2000, 0x6000};\n"
+        "for (uint32_t flag : flags) {\n"
+        "*reinterpret_cast<uint32_t*>(memory + 0x38) = __builtin_bswap32(flag);\n"
+        "ctx.r4.u64 = 0x20; ctx.r6.u64 = 0x1122334455667788ULL; ctx.lr = 0x12345678;\n"
+        "sub_848B6FA0(ctx, memory);\n"
+        "assert(destination == ((flag & 0x4000) ? 0x84B85808u : 0x84B85C28u));\n"
+        "assert(observed == 0x1122334455667788ULL && ctx.r3.u64 == 0xCAFE);\n"
+        "assert(ctx.r4.u64 == 0x20 && ctx.r6.u64 == observed && ctx.lr == 0x12345678);\n"
+        "}\nsub_848B6F98(ctx, memory);\n"
+        "assert(destination == 0x84B85818 && observed == ctx.r6.u64 && ctx.r3.u64 == 0xCAFE);\n"
+        "assert(ctx.lr == 0x12345678);\n}\n", encoding="utf-8",
+    )
+    compilation = subprocess.run(
+        [compiler, "-std=c++23", "-O2", "-msse4.1", "-DNOMINMAX", "-DWIN32_LEAN_AND_MEAN",
+         "-DSPDLOG_FMT_EXTERNAL", "-DSPDLOG_COMPILED_LIB", "-I", str(sdk), "-I", str(generated),
+         str(source), "-o", str(executable)], capture_output=True, text=True,
+    )
+    assert compilation.returncode == 0, compilation.stderr
+    execution = subprocess.run([str(executable)], capture_output=True, text=True)
+    assert execution.returncode == 0, f"Arena callback failed: {execution.returncode}, {execution.stderr}"
