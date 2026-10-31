@@ -172,3 +172,47 @@ def test_generated_arena_callbacks_preserve_both_flag_paths(tmp_path):
     assert compilation.returncode == 0, compilation.stderr
     execution = subprocess.run([str(executable)], capture_output=True, text=True)
     assert execution.returncode == 0, f"Arena callback failed: {execution.returncode}, {execution.stderr}"
+
+
+def test_generated_script_callback_loads_global_and_tail_calls(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    generated = root / "port/generated/default"
+    sdk = root / "port/sdk/include"
+    compiler = shutil.which("clang++")
+    if sys.platform != "win32" or not compiler or not sdk.is_dir() or not generated.is_dir():
+        pytest.skip("Requires Windows, local ReXGlue SDK, generated game code, and clang++")
+    signature = "DEFINE_REX_FUNC(sub_84AB8CA8) {"
+    body = None
+    for path in generated.glob("*_recomp.*.cpp"):
+        text = path.read_text(encoding="utf-8")
+        if signature in text:
+            start = text.index(signature)
+            body = text[start:text.index("\n}\n", start) + 3]
+            break
+    assert body is not None
+    assert "{ 0x84AB8CA8, sub_84AB8CA8 }" in (generated / "ch2k8_init.cpp").read_text()
+    source = tmp_path / "script_callback.cpp"
+    executable = tmp_path / "script_callback.exe"
+    source.write_text(
+        '#include "ch2k8_pch.h"\n#include <windows.h>\nstatic uint64_t observed;\n'
+        'extern "C" void sub_8497AA48(PPCContext& ctx, uint8_t*) { observed = ctx.r3.u64; ctx.r3.u64 = 0xCAFE; }\n'
+        + body + "\nint main() { PPCContext ctx{};\n"
+        "auto memory = static_cast<uint8_t*>(VirtualAlloc(nullptr, 1ull << 32, MEM_RESERVE, PAGE_NOACCESS));\n"
+        "if (!memory) return 2;\n"
+        "if (!VirtualAlloc(memory + 0x8586E000u, 4096, MEM_COMMIT, PAGE_READWRITE)) return 3;\n"
+        "const uint32_t values[] = {0, 0x12345678, 0xF2345678};\n"
+        "for (uint32_t value : values) {\n"
+        "*reinterpret_cast<uint32_t*>(memory + 0x8586E310u) = __builtin_bswap32(value);\n"
+        "ctx.r3.u64 = 0xFFFFFFFFFFFFFFFFULL; ctx.lr = 0x12345678; ctx.r4.u64 = 0xAABB;\n"
+        "sub_84AB8CA8(ctx, memory);\n"
+        "assert(observed == value && ctx.r3.u64 == 0xCAFE && ctx.lr == 0x12345678 && ctx.r4.u64 == 0xAABB);\n"
+        "}\nVirtualFree(memory, 0, MEM_RELEASE);\n}\n", encoding="utf-8",
+    )
+    compilation = subprocess.run(
+        [compiler, "-std=c++23", "-O2", "-msse4.1", "-DNOMINMAX", "-DWIN32_LEAN_AND_MEAN",
+         "-DSPDLOG_FMT_EXTERNAL", "-DSPDLOG_COMPILED_LIB", "-I", str(sdk), "-I", str(generated),
+         str(source), "-o", str(executable)], capture_output=True, text=True,
+    )
+    assert compilation.returncode == 0, compilation.stderr
+    execution = subprocess.run([str(executable)], capture_output=True, text=True)
+    assert execution.returncode == 0, f"Script callback failed: {execution.returncode}, {execution.stderr}"

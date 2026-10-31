@@ -1,5 +1,8 @@
 # 2026-10-31: Arena introduction callback-table gaps
 
+Follow-up: the next attempt terminates at a different target in scripted data;
+see [the scripted-callback finding](2026-10-31-scripted-gameplay-callback.md).
+
 ## Question
 
 Why does the next gameplay attempt reach the arena introduction and then crash?

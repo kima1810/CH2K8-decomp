@@ -128,3 +128,6 @@ See [the gameplay-crash finding](../docs/findings/2026-10-31-gameplay-startup-ca
 for the observed failure and correction.
 The [arena-introduction finding](../docs/findings/2026-10-31-arena-intro-callbacks.md)
 records the subsequent callback repair and the separate rendering symptoms.
+The next attempt reached a different missing callback, `84AB8CA8`; its verified
+global-load/tail-call wrapper is now registered. See the
+[scripted-callback finding](../docs/findings/2026-10-31-scripted-gameplay-callback.md).

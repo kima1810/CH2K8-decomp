@@ -1,6 +1,6 @@
 # Code addresses referenced from data or built with lis/addi (vtables, callbacks)
 # that analysis did not register as functions. Add entries as codegen or runtime finds them.
-# 16 entries.
+# 17 entries.
 
 [functions]
 # First codegen (ReXGlue 0.10.0.24, 2026-10-22): "UnresolvedCall ... target not in any function".
@@ -51,3 +51,9 @@
 # Only FA0 is runtime-observed; F98 is a verified table-referenced sibling.
 0x848B6F98 = { size = 8 }
 0x848B6FA0 = { end = 0x848B6FBC }
+
+# [CONFIRMED] Log 007 reaches this unregistered scripted callback. Ghidra
+# verifies lis/lwz loading r3 from 8586E310, then b 8497AA48; zero padding
+# starts at 84AB8CB4. All 87 code-pointer candidates in the bounded source
+# data region [8208D000,8208F000) are registered except this entry.
+0x84AB8CA8 = { size = 12 }
