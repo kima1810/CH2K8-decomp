@@ -139,3 +139,10 @@ component order, source half, saturation and overflow behavior. Its numeric
 tests match Xenia; visual confirmation is still required. Log 009's missing
 `8471B108` callback and seven verified siblings are also registered. See the
 [packed-vector finding](../docs/findings/2026-10-31-packed-vector-geometry.md).
+The user subsequently confirms correct camera/replay rendering and supplies
+a coherent paused scene, but live gameplay stays black. Log 010 closes normally.
+Use `tools/launch_render_diagnostic.ps1 -Profile rov` for the first isolated
+render-target comparison (`baseline` and `synchronous` are also available).
+Run folders contain settings, runtime logs, and process CPU samples, not GPU
+frame timings. These are diagnostic profiles, not verified fixes. See the
+[live-gameplay finding](../docs/findings/2026-10-31-live-gameplay-black-screen.md).
