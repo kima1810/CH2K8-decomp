@@ -1,6 +1,6 @@
 # Code addresses referenced from data or built with lis/addi (vtables, callbacks)
 # that analysis did not register as functions. Add entries as codegen or runtime finds them.
-# 11 entries.
+# 14 entries.
 
 [functions]
 # First codegen (ReXGlue 0.10.0.24, 2026-10-22): "UnresolvedCall ... target not in any function".
@@ -31,3 +31,13 @@
 # to the already registered 0x84718E20; the next word is zero padding.
 # See docs/findings/2026-10-31-gameplay-startup-callback.md.
 0x8471B2F0 = { size = 4 }
+
+# [CONFIRMED] The next gameplay attempt reaches 0x8471B2E8. Read-only Ghidra
+# inspection of the complete 25-entry, 8-byte-slot family [8471B2B8,8471B380)
+# finds these three remaining registry gaps. E8 and 300 mask r3 to eight bits
+# before their tail branch; 308 is a single branch followed by zero padding.
+# All three destination functions are already registered. Only E8 has been
+# observed at runtime; 300/308 are structurally verified sibling entries.
+0x8471B2E8 = { size = 8 }  # -> 0x84718DD0
+0x8471B300 = { size = 8 }  # -> 0x84718EA0
+0x8471B308 = { size = 4 }  # -> 0x84718EC0

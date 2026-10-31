@@ -59,3 +59,60 @@ def test_generated_startup_loop_reaches_cases_eight_and_nine(tmp_path):
     assert compilation.returncode == 0, compilation.stderr
     execution = subprocess.run([str(executable)], capture_output=True, text=True)
     assert execution.returncode == 0, f"Generated loop failed: {execution.returncode}, {execution.stderr}"
+
+
+def test_generated_gameplay_thunks_preserve_arguments_and_return_path(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    generated = root / "port/generated/default"
+    sdk = root / "port/sdk/include"
+    compiler = shutil.which("clang++")
+    if sys.platform != "win32" or not compiler or not sdk.is_dir() or not generated.is_dir():
+        pytest.skip("Requires Windows, local ReXGlue SDK, generated game code, and clang++")
+    thunks = {
+        0x8471B2E8: (0x84718DD0, True),
+        0x8471B2F0: (0x84718E20, False),
+        0x8471B300: (0x84718EA0, True),
+        0x8471B308: (0x84718EC0, False),
+    }
+    bodies = {}
+    for path in generated.glob("*_recomp.*.cpp"):
+        text = path.read_text(encoding="utf-8")
+        for address in thunks:
+            signature = f"DEFINE_REX_FUNC(sub_{address:08X}) {{"
+            if signature in text:
+                start = text.index(signature)
+                bodies[address] = text[start:text.index("\n}\n", start) + 3]
+        if len(bodies) == len(thunks):
+            break
+    assert set(bodies) == set(thunks), "Gameplay thunk absent from generated sources"
+    mappings = (generated / "ch2k8_init.cpp").read_text(encoding="utf-8")
+    stubs, checks = [], []
+    for address, (target, masks_byte) in thunks.items():
+        assert f"{{ 0x{address:08X}, sub_{address:08X} }}" in mappings
+        stubs.append(
+            f'extern "C" void sub_{target:08X}(PPCContext& ctx, uint8_t*) {{ '
+            f"observed = ctx.r3.u64; destination = 0x{target:08X}; ctx.r3.u64 = 0xCAFE; }}"
+        )
+        expected = "0x88" if masks_byte else "0x1122334455667788ULL"
+        checks.append(
+            "ctx.r3.u64 = 0x1122334455667788ULL; ctx.r4.u64 = 0xAABB; ctx.lr = 0x12345678;\n"
+            f"sub_{address:08X}(ctx, memory);\n"
+            f"assert(observed == {expected} && destination == 0x{target:08X});\n"
+            "assert(ctx.r3.u64 == 0xCAFE && ctx.r4.u64 == 0xAABB && ctx.lr == 0x12345678);\n"
+        )
+    source = tmp_path / "gameplay_thunks.cpp"
+    executable = tmp_path / "gameplay_thunks.exe"
+    source.write_text(
+        '#include "ch2k8_pch.h"\nstatic uint64_t observed; static uint32_t destination;\n'
+        + "\n".join(stubs) + "\n" + "\n".join(bodies.values())
+        + "\nint main() { PPCContext ctx{}; alignas(32) uint8_t memory[32]{};\n"
+        + "\n".join(checks) + "\n}\n", encoding="utf-8",
+    )
+    compilation = subprocess.run(
+        [compiler, "-std=c++23", "-O2", "-msse4.1", "-DNOMINMAX", "-DWIN32_LEAN_AND_MEAN",
+         "-DSPDLOG_FMT_EXTERNAL", "-DSPDLOG_COMPILED_LIB", "-I", str(sdk), "-I", str(generated),
+         str(source), "-o", str(executable)], capture_output=True, text=True,
+    )
+    assert compilation.returncode == 0, compilation.stderr
+    execution = subprocess.run([str(executable)], capture_output=True, text=True)
+    assert execution.returncode == 0, f"Generated thunk failed: {execution.returncode}, {execution.stderr}"

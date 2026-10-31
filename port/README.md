@@ -116,8 +116,9 @@ existing file. This does not audit other switch forms or arbitrary callbacks.
 The final 2026-10-30 startup test stayed alive for 30 seconds after initialization,
 then was deliberately stopped. On 2026-10-31, the user confirmed a successful
 menu boot. A subsequent gameplay-start attempt crashed on missing callback
-`8471B2F0`; its original four-byte tail-call thunk is now registered.
-**Gameplay after that fix still requires a retry.** Allocation errors and kernel/network
+`8471B2F0`, then a retry reached the neighboring `8471B2E8`. The full 25-entry
+thunk family has now been audited and its four missing entries registered.
+**Gameplay after the family fix still requires a retry.** Allocation errors and kernel/network
 stubs remain in the earlier logs; their resolution has not been established.
 See [the menu-boot finding](../docs/findings/2026-10-31-menu-boot.md).
 See [the gameplay-crash finding](../docs/findings/2026-10-31-gameplay-startup-callback.md)
