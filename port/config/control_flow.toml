@@ -11,6 +11,18 @@
 0x84C20AE8 = { end = 0x84C20B90 }
 0x84D40778 = { end = 0x84D40850 }
 0x84DAB6E8 = { end = 0x84DAB720 }
+# [CONFIRMED] Profiling hit a truncated second dispatch in this function.
+# Its final shared epilogue is 84C1F028..84C1F038; the next prologue starts F038.
+0x84C1EAA8 = { end = 0x84C1F038 }
+
+# [CONFIRMED] Original eleven words at 84C1EBB0..84C1EBDC. Unlike the
+# audited self-contained inline idiom, code for the earlier dispatch follows
+# this table before its earliest target. See the slowdown finding.
+[[switch_tables]]
+address = 0x84C1EBAC
+register = 11
+labels = [0x84C1EC30, 0x84C1ED5C, 0x84C1ED5C, 0x84C1EDCC, 0x84C1EDF4,
+          0x84C1EF9C, 0x84C1EFC0, 0x84C1F028, 0x84C1EFE4, 0x84C1F028, 0x84C1F028]
 
 # The index is r10 before rlwinm scales it into r0. These are four
 # consecutive big-endian pointers immediately following each bctr.

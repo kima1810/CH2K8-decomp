@@ -153,3 +153,12 @@ Run folders contain settings, runtime logs, and process CPU samples, not GPU
 frame timings. ROV was subsequently user-validated to restore live gameplay
 and is now the working launch setting; other profiles remain diagnostic. See the
 [live-gameplay finding](../docs/findings/2026-10-31-live-gameplay-black-screen.md).
+
+For slowdown investigation, the diagnostic launcher now captures GPU/host
+presentation timings if the official portable PresentMon executable exists at
+`work/tooling/presentmon/PresentMon-2.6.0-x64.exe`. Trace failures are logged;
+ETW access may require an administrator shell. `-Profile rov-ui` compares UI-thread
+presentation while retaining ROV; it is an unproven performance experiment.
+Use `python tools/summarize_presentmon.py PATH/TO/presentmon.csv --start 30 --end 60`
+to summarize one timeline window. Host presentation rate is not gameplay FPS.
+See the [performance finding](../docs/findings/2026-10-31-performance-investigation.md).

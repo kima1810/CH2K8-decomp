@@ -1,5 +1,7 @@
 # Findings index
 
+- [2026-10-31 Performance investigation](2026-10-31-performance-investigation.md): Release build confirmed; PresentMon startup capture does not establish GPU saturation. Repair a new eleven-case dispatch blocker and add process-scoped timing capture plus a separate ROV UI-thread comparison; sustained gameplay profiling remains required.
+
 - [2026-10-31 Live gameplay black screen](2026-10-31-live-gameplay-black-screen.md): user confirms ROV restores live gameplay, replay and camera edits; approximately 272-second run closes normally. ROV becomes the working launcher setting; slowdown, one black player head and depth-resolve warnings remain under investigation.
 
 - [2026-10-31 Packed vector geometry](2026-10-31-packed-vector-geometry.md): pre-run-out black flash report leads to a verified packed-vector translation error; correct source half, biased float bits, component order and overflow handling. Visual retry remains required.
