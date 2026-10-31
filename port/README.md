@@ -162,3 +162,8 @@ presentation while retaining ROV; it is an unproven performance experiment.
 Use `python tools/summarize_presentmon.py PATH/TO/presentmon.csv --start 30 --end 60`
 to summarize one timeline window. Host presentation rate is not gameplay FPS.
 See the [performance finding](../docs/findings/2026-10-31-performance-investigation.md).
+The completed user test shows a 30.95-second pipeline-creation startup stall
+and expensive later GPU work. Whole-run medians hide that cost; use bounded
+timeline windows, p99 and long-record counts. No performance fix is verified.
+Captures now have a default 600-second stop timer (`-CaptureSeconds` overrides
+it), and `trace.json` records the exact session/PIDs for targeted cleanup.

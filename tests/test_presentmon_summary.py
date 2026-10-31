@@ -23,6 +23,18 @@ def test_summary_separates_swap_chains_and_ignores_unavailable_gpu_values(tmp_pa
     assert chain_b['host_presents_per_second'] is None
 
 
+def test_gpu_tail_is_reported_even_when_median_is_fast(tmp_path):
+    capture = tmp_path / 'capture.csv'
+    rows = ['ProcessID,SwapChainAddress,TimeInMs,MsGPUBusy']
+    rows += [f'12,A,{index*10},0.3' for index in range(99)]
+    rows.append('12,A,990,240')
+    capture.write_text('\n'.join(rows))
+    stats = summarize(capture)[0]['metrics_ms']['MsGPUBusy']
+    assert stats['p50'] == 0.3
+    assert stats['max'] == 240
+    assert stats['at_least_100_ms'] == 1
+
+
 def test_profiling_blocker_dispatch_has_all_original_targets():
     from audit_inline_switches import read_emitted
     generated = Path(__file__).resolve().parents[1] / 'port/generated/default'

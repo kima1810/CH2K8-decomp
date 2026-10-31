@@ -1,6 +1,6 @@
 # Findings index
 
-- [2026-10-31 Performance investigation](2026-10-31-performance-investigation.md): Release build confirmed; PresentMon startup capture does not establish GPU saturation. Repair a new eleven-case dispatch blocker and add process-scoped timing capture plus a separate ROV UI-thread comparison; sustained gameplay profiling remains required.
+- [2026-10-31 Performance investigation](2026-10-31-performance-investigation.md): completed 319-second user trace identifies 30.95 seconds of startup pipeline creation and later GPU-busy periods around 200–250 ms. UI presentation scheduling has not removed the long GPU work. Add timing-tail statistics and bounded capture cleanup; individual expensive ROV draws remain unidentified.
 
 - [2026-10-31 Live gameplay black screen](2026-10-31-live-gameplay-black-screen.md): user confirms ROV restores live gameplay, replay and camera edits; approximately 272-second run closes normally. ROV becomes the working launcher setting; slowdown, one black player head and depth-resolve warnings remain under investigation.
 

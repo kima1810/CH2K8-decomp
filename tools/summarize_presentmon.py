@@ -38,7 +38,10 @@ def summarize(path: Path, start: float = 0, end: float = math.inf) -> list[dict]
             if values:
                 values.sort()
                 result['metrics_ms'][metric] = {'count': len(values), 'mean': sum(values)/len(values),
-                    'p50': values[(len(values)-1)//2], 'p95': values[math.ceil(.95*len(values))-1], 'max': values[-1]}
+                    'p50': values[(len(values)-1)//2], 'p95': values[math.ceil(.95*len(values))-1],
+                    'p99': values[math.ceil(.99*len(values))-1], 'max': values[-1],
+                    'at_least_16_7_ms': sum(value >= 16.7 for value in values),
+                    'at_least_100_ms': sum(value >= 100 for value in values)}
         output.append(result)
     return output
 

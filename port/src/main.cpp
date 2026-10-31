@@ -25,7 +25,9 @@ class Ch2k8App : public rex::ReXApp {
     // after setup so rendering comparisons can verify the requested profile.
     for (const auto* name : {"render_target_path_d3d12", "async_shader_compilation",
                              "readback_resolve", "readback_memexport",
-                             "occlusion_query_enable"}) {
+                             "occlusion_query_enable", "host_present_from_non_ui_thread",
+                             "draw_resolution_scale_x", "draw_resolution_scale_y",
+                             "dxbc_switch", "d3d12_pipeline_creation_threads"}) {
       REXLOG_INFO("CH2K8 rendering configuration: {}={}", name,
                   rex::cvar::GetFlagByName(name));
     }

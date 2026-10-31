@@ -96,3 +96,74 @@ Sustained gameplay profiling and a demonstrated speedup remain outstanding.
 
 Primary tool documentation:
 [PresentMon console application](https://github.com/GameTechDev/PresentMon/blob/v2.6.0/README-ConsoleApplication.md).
+
+## Completed user test: startup compilation and long GPU work
+
+The user ran `20261031-185744-266-rov-ui` from 18:57:44 to 19:03:03
+America/New_York. The game closed normally after about 319 seconds. The
+manifest requests ROV plus UI-thread presentation; runtime confirms ROV,
+async shaders enabled, resolve readback disabled and memexport readback enabled.
+Executable SHA-256:
+`AB24748FD33544221F896393AD44AA62A200E3CA4999E626EB2B21EFAB200471`.
+
+The user reports entering camera settings and doing so before exiting; exact
+phase transition times and a subjective speed comparison are not available.
+Do not assign specific timed windows to live gameplay or replay without that
+evidence.
+
+### Startup cost is directly identified
+
+The runtime reports **232 graphics pipelines created in 30,951 ms**. Cached
+shader translation itself takes only **7 ms**. Process samples average about
+**9.50 logical CPU cores** over seconds 0–30, falling to roughly **1.3–1.5 cores**
+in most later minute windows. Thus pipeline creation is a major confirmed
+startup cost in this run. The trace includes a roughly 32-second gap around
+that initialization. It does not establish why the driver's pipeline cache
+was expensive on this run or prove that pipeline creation causes all later
+loading transitions. Disabling preload would risk moving compilation stalls
+into gameplay rather than removing the work.
+
+### Later slow periods contain expensive GPU work
+
+The capture contains 54,344 host presentation records on one swap chain.
+Whole-run medians conceal the problem because inexpensive UI/repeated-image
+presentation records dominate. Use time windows and tail statistics:
+
+| Capture timeline | GPU busy median | GPU busy p95 | GPU busy p99 | Records >=100 ms |
+|---|---:|---:|---:|---:|
+| 180–240 s | 0.347 ms | 25.915 ms | 227.997 ms | 163 / 4,400 |
+| 300–319.2 s | 95.079 ms | 217.987 ms | 227.573 ms | 107 / 275 |
+
+During seconds 180–240, GPU wait p99 is only **0.063 ms**, with a maximum of
+**0.108 ms**. Near the end, one GPU-busy record reaches **1,058 ms**. These
+measurements support a GPU execution bottleneck in the expensive periods,
+not a simple application-wide CPU utilization limit. They do not identify
+individual draws/shaders, distinguish overdraw from bandwidth/ROV ordering,
+or constitute gameplay FPS. Presentation scheduling alone has not eliminated
+the long GPU work; there is no matched normal-ROV GPU capture proving its
+relative speed effect.
+
+### Capture lifecycle and follow-up
+
+PresentMon remained alive with its CSV locked after the game closed. Ending
+only its named `CH2K8-4940` session released and flushed the 13.3 MB trace.
+The launcher now records trace/game PIDs and the session name in `trace.json`
+and adds an independent timed stop (default 600 seconds), so capture lifetime
+is bounded even if process-exit cleanup is interrupted. It still requests
+termination at game exit and stops only its own session.
+
+The summary tool now reports p99 and >=16.7/100 ms counts; a regression checks
+that a rare expensive GPU record remains visible even with a fast median.
+The app logs resolution scale, shader flow-control mode, pipeline creation
+thread count and presentation-thread setting on future runs.
+
+Next diagnostic target is per-draw GPU timing/capture of an expensive ROV
+scene. Keep the working rendering and memory-coherency settings intact.
+Changing DXBC control-flow generation is not promoted as an optimization:
+[Xenia's upstream implementation](https://github.com/xenia-project/xenia/blob/master/src/xenia/gpu/dxbc_shader_translator.cc)
+documents driver-dependent stability issues and recommends switch flow on AMD.
+No verified performance fix is claimed yet.
+
+Validation of this follow-up: host rebuild **PASS**, full suite **32 passed,
+1 skipped**, and the Windows PowerShell GUI-stub smoke confirms trace metadata,
+bounded capture options and normal exit handling. Raw captures remain local.

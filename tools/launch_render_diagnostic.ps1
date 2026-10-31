@@ -9,7 +9,9 @@ param(
     [string]$Executable,
     [string]$GameData,
     [string]$UserData,
-    [string]$PresentMon
+    [string]$PresentMon,
+    [ValidateRange(10, 3600)]
+    [int]$CaptureSeconds = 600
 )
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
@@ -45,6 +47,7 @@ switch ($Profile) {
     executable_sha256 = (Get-FileHash -LiteralPath $Executable -Algorithm SHA256).Hash
     arguments = $arguments
     presentmon = $PresentMon
+    capture_seconds = $CaptureSeconds
 } | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath (Join-Path $runRoot 'run.json') -Encoding utf8
 Write-Host "Rendering comparison: $Profile"
 Write-Host "Logs: $runRoot"
@@ -57,8 +60,9 @@ $gameProcess = Start-Process -FilePath $Executable -WorkingDirectory (Split-Path
 $traceProcess = $null
 $traceSession = 'CH2K8-' + $gameProcess.Id
 if (Test-Path -LiteralPath $PresentMon) {
-    $traceArguments = @('--process_id', $gameProcess.Id, '--output_file', ('"'+(Join-Path $runRoot 'presentmon.csv')+'"'), '--session_name', $traceSession, '--terminate_on_proc_exit', '--no_console_stats', '--no_track_input')
+    $traceArguments = @('--process_id', $gameProcess.Id, '--output_file', ('"'+(Join-Path $runRoot 'presentmon.csv')+'"'), '--session_name', $traceSession, '--terminate_on_proc_exit', '--timed', $CaptureSeconds, '--terminate_after_timed', '--no_console_stats', '--no_track_input')
     $traceProcess = Start-Process -FilePath $PresentMon -ArgumentList $traceArguments -WindowStyle Hidden -RedirectStandardOutput (Join-Path $runRoot 'presentmon-stdout.txt') -RedirectStandardError (Join-Path $runRoot 'presentmon-stderr.txt') -PassThru
+    @{ process_id = $traceProcess.Id; session = $traceSession; game_process_id = $gameProcess.Id } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $runRoot 'trace.json') -Encoding utf8
     if ($traceProcess.WaitForExit(300) -and $traceProcess.ExitCode -ne 0) {
         Write-Warning ('PresentMon could not start; inspect presentmon-stderr.txt. ETW access may require running this diagnostic as administrator. CPU sampling will continue.')
     } else {
@@ -93,6 +97,9 @@ try {
         # End only the session created by this launcher, preserving other traces.
         $stopTrace = Start-Process -FilePath $PresentMon -ArgumentList @('--session_name',$traceSession,'--terminate_existing_session') -WindowStyle Hidden -PassThru
         $stopTrace.WaitForExit(5000) | Out-Null
+        if (-not $traceProcess.WaitForExit(5000)) {
+            Write-Warning ('PresentMon is still flushing; its independent timer will end capture. Session: '+$traceSession)
+        }
     }
 }
 Write-Host "Game exited with code $gameExitCode. Logs: $runRoot"
