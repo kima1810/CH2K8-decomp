@@ -1,7 +1,8 @@
 # Findings index
 
-- [2026-10-31 Menu boot](2026-10-31-menu-boot.md): the user confirms a successful native menu boot; gameplay remains untested.
-- [2026-10-30 Native build + control-flow recovery](2026-10-30-native-build-and-control-flow.md): native build succeeds; resolved 16 fatal fallbacks, recovered 37 switch tables, corrected VMX shifts and incremental builds, and survived a 30-second startup observation. Menu boot was subsequently user-confirmed on 2026-10-31; gameplay remains untested.
+- [2026-10-31 Gameplay startup callback](2026-10-31-gameplay-startup-callback.md): gameplay entry crashes on unregistered tail-call thunk `8471B2F0`; added its verified four-byte function mapping, pending gameplay retry.
+- [2026-10-31 Menu boot](2026-10-31-menu-boot.md): the user confirms a successful native menu boot; a subsequent gameplay attempt and crash are recorded in the callback finding above.
+- [2026-10-30 Native build + control-flow recovery](2026-10-30-native-build-and-control-flow.md): native build succeeds; resolved 16 fatal fallbacks, recovered 37 switch tables, corrected VMX shifts and incremental builds, and survived a 30-second startup observation. Menu boot was subsequently user-confirmed; gameplay entry failure and its mapping fix are recorded above.
 - [2026-10-09 Phase 0 inventory + USRDIR archive](2026-10-09-phase0-inventory.md): split archive `AA00B3BF` decoded and round-tripped; TOC size is bytes; 300 files shared with 2K9, whose IFFs are byte-swapped.
 - [2026-10-22 Port target + archive rebuild](2026-10-22-port-target-and-archive-rebuild.md): the port targets the 360 XEX; the USRDIR archive can now be rebuilt with resized or relocated entries (an identity rebuild is byte-identical; not yet boot-tested).
 - [2026-10-22 First ReXGlue codegen](2026-10-22-rexglue-first-codegen.md): ReXGlue reads the retail XEX directly; codegen succeeds with 8 manual function starts (53,803 functions); 16 fatal fallbacks in 3 functions remain.

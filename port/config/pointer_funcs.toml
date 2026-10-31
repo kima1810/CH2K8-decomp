@@ -1,6 +1,6 @@
 # Code addresses referenced from data or built with lis/addi (vtables, callbacks)
 # that analysis did not register as functions. Add entries as codegen or runtime finds them.
-# 10 entries.
+# 11 entries.
 
 [functions]
 # First codegen (ReXGlue 0.10.0.24, 2026-10-22): "UnresolvedCall ... target not in any function".
@@ -25,3 +25,9 @@
 # the entry's index check, failure return, and virtual tail call through CTR;
 # the next independent entry begins at 0x84E203B0.
 0x84E20368 = { end = 0x84E203B0 }
+
+# [CONFIRMED] Gameplay startup log ch2k8_004.log (2026-10-31) reports this
+# indirect target as unregistered. Original word 4BFFDB30 is a tail branch
+# to the already registered 0x84718E20; the next word is zero padding.
+# See docs/findings/2026-10-31-gameplay-startup-callback.md.
+0x8471B2F0 = { size = 4 }
