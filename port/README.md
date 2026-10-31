@@ -72,8 +72,13 @@ After a successful build, the executable is `out/build/win-amd64/ch2k8.exe`.
 An explicit runtime command is:
 
 ```powershell
-./out/build/win-amd64/ch2k8.exe --game_data_root ../work/ch2k8/XBOX/disc --gpu_plugin xenos
+./out/build/win-amd64/ch2k8.exe --game_data_root ../work/ch2k8/XBOX/disc --gpu_plugin xenos --render_target_path_d3d12 rov
 ```
+
+ROV is the current user-validated path for live gameplay on the tested AMD
+adapter. The default host-render-target path produces black live output even
+though replay/camera views render. ROV is slower; performance and one player's
+black head remain unresolved. Full-game completion and Legacy are untested.
 
 ## Verify and investigate
 
@@ -121,7 +126,8 @@ thunk family has now been audited and its four missing entries registered.
 The next attempt renders an arena introduction with visible geometry artifacts,
 then stops at another missing callback, `848B6FA0`. Its 185-record table region
 has now been audited and both missing entries registered.
-**Interactive gameplay remains unverified; geometry corruption is unresolved.** Allocation errors and kernel/network
+At this earlier stage interactive gameplay was unverified. The later ROV
+validation below establishes live gameplay rendering. Allocation errors and kernel/network
 stubs remain in the earlier logs; their resolution has not been established.
 See [the menu-boot finding](../docs/findings/2026-10-31-menu-boot.md).
 See [the gameplay-crash finding](../docs/findings/2026-10-31-gameplay-startup-callback.md)
@@ -144,5 +150,6 @@ a coherent paused scene, but live gameplay stays black. Log 010 closes normally.
 Use `tools/launch_render_diagnostic.ps1 -Profile rov` for the first isolated
 render-target comparison (`baseline` and `synchronous` are also available).
 Run folders contain settings, runtime logs, and process CPU samples, not GPU
-frame timings. These are diagnostic profiles, not verified fixes. See the
+frame timings. ROV was subsequently user-validated to restore live gameplay
+and is now the working launch setting; other profiles remain diagnostic. See the
 [live-gameplay finding](../docs/findings/2026-10-31-live-gameplay-black-screen.md).
