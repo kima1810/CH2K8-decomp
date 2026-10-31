@@ -1,5 +1,9 @@
 # 2026-10-30: Native build and control-flow recovery
 
+Follow-up: [2026-10-31 menu boot](2026-10-31-menu-boot.md) records the user's
+successful menu boot. Gameplay remains untested. The automated observations
+below retain their original, narrower scope.
+
 ## Question
 
 Can the existing Windows recompilation skeleton build from the USA retail XEX,
@@ -256,7 +260,7 @@ Other switch idioms and arbitrary indirect calls remain outside this audit.
   shader translation/pipeline creation, GPU interrupt setup, and controller
   discovery. No fatal call or illegal-instruction exit occurs in that window.
 
-This is **not a confirmed menu or gameplay result**. The application was run
+This automated test alone is **not a confirmed menu or gameplay result**. The application was run
 with `--headless` for log-based observation; no visual legal-screen/menu check,
 input-to-menu test, exhibition game, or Dynasty/save test was performed.
 Physical-memory protection errors and kernel/network stubs remain in the log.
@@ -288,7 +292,8 @@ expression correction is applied reproducibly by the build wrapper.
 
 ## Open questions
 
-- Does startup reach the legal screens and menu with the Xenos plugin?
+- Menu boot is now user-confirmed in the [2026-10-31 follow-up](2026-10-31-menu-boot.md).
+  Legal-screen presentation was not separately reported.
 - Are non-inline/relative switches or other idioms outside the audited exact
   pattern also truncated without explicit fatal diagnostics?
 - What causes the physical-memory protection warnings, and are the kernel/

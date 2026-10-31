@@ -114,5 +114,7 @@ can propose verified prefix extensions for review; it refuses to overwrite an
 existing file. This does not audit other switch forms or arbitrary callbacks.
 
 The final 2026-10-30 startup test stayed alive for 30 seconds after initialization,
-then was deliberately stopped. Menus/gameplay are unverified, and allocation
-errors and kernel/network stubs remain in its logs.
+then was deliberately stopped. On 2026-10-31, the user confirmed a successful
+menu boot. **Gameplay remains untested.** Allocation errors and kernel/network
+stubs remain in the earlier logs; their resolution has not been established.
+See [the menu-boot finding](../docs/findings/2026-10-31-menu-boot.md).
