@@ -69,6 +69,14 @@ def test_generated_gameplay_thunks_preserve_arguments_and_return_path(tmp_path):
     if sys.platform != "win32" or not compiler or not sdk.is_dir() or not generated.is_dir():
         pytest.skip("Requires Windows, local ReXGlue SDK, generated game code, and clang++")
     thunks = {
+        0x8471B0B8: (0x84718B60, True),
+        0x8471B0C0: (0x84718B70, True),
+        0x8471B0C8: (0x84718B80, True),
+        0x8471B0D0: (0x84718B90, True),
+        0x8471B0D8: (0x84718B10, False),
+        0x8471B0F8: (0x847187A8, True),
+        0x8471B100: (0x8471A1B0, True),
+        0x8471B108: (0x84718AE0, False),
         0x8471B2E8: (0x84718DD0, True),
         0x8471B2F0: (0x84718E20, False),
         0x8471B300: (0x84718EA0, True),

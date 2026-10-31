@@ -133,3 +133,9 @@ global-load/tail-call wrapper is now registered. See the
 [scripted-callback finding](../docs/findings/2026-10-31-scripted-gameplay-callback.md).
 The following attempt reached `848E3A00`; its original flag-bit clearing body
 is registered in the [flag-callback finding](../docs/findings/2026-10-31-gameplay-flag-callback.md).
+The pre-run-out black flash prompted a packed-vector translation audit. The
+type-6 pack/unpack correction now preserves the required biased float bits,
+component order, source half, saturation and overflow behavior. Its numeric
+tests match Xenia; visual confirmation is still required. Log 009's missing
+`8471B108` callback and seven verified siblings are also registered. See the
+[packed-vector finding](../docs/findings/2026-10-31-packed-vector-geometry.md).

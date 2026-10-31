@@ -1,6 +1,6 @@
 # Code addresses referenced from data or built with lis/addi (vtables, callbacks)
 # that analysis did not register as functions. Add entries as codegen or runtime finds them.
-# 18 entries.
+# 26 entries.
 
 [functions]
 # First codegen (ReXGlue 0.10.0.24, 2026-10-22): "UnresolvedCall ... target not in any function".
@@ -62,3 +62,18 @@
 # loads the object pointer from [r3+0x10], clears bit 0 of [object+0x1C],
 # stores it, then returns. Zero padding begins at 848E3A14.
 0x848E3A00 = { size = 20 }
+
+# [CONFIRMED] Log 009 reaches this one-instruction callback, b 84718AE0.
+# Read-only Ghidra verifies zero padding immediately after it.
+0x8471B108 = { size = 4 }
+
+# [CONFIRMED] Read-only audit of sibling slots [8471B0B8,8471B118)
+# finds seven more missing entries. All branch destinations are registered.
+# These siblings are structurally verified, not yet runtime-observed.
+0x8471B0B8 = { size = 8 }  # mask r3 to byte -> 84718B60
+0x8471B0C0 = { size = 8 }  # mask r3 to byte -> 84718B70
+0x8471B0C8 = { size = 8 }  # mask r3 to byte -> 84718B80
+0x8471B0D0 = { size = 8 }  # mask r3 to byte -> 84718B90
+0x8471B0D8 = { size = 4 }  # -> 84718B10, then padding
+0x8471B0F8 = { size = 8 }  # mask r3 to byte -> 847187A8
+0x8471B100 = { size = 8 }  # mask r3 to byte -> 8471A1B0

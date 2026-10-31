@@ -1,5 +1,7 @@
 # Findings index
 
+- [2026-10-31 Packed vector geometry](2026-10-31-packed-vector-geometry.md): pre-run-out black flash report leads to a verified packed-vector translation error; correct source half, biased float bits, component order and overflow handling. Visual retry remains required.
+
 - [2026-10-31 Gameplay flag callback](2026-10-31-gameplay-flag-callback.md): log 008 reaches `848E3A00`; recovered its flag-bit clearing body and audited 42 nearby code-pointer candidates.
 
 - [2026-10-31 Scripted gameplay callback](2026-10-31-scripted-gameplay-callback.md): the next attempt stops on `84AB8CA8`; verified its global-load/tail-call body and audited 87 code-pointer candidates in the containing data region. Added the sole missing entry; gameplay retry remains required.
