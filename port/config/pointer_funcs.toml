@@ -1,6 +1,6 @@
 # Code addresses referenced from data or built with lis/addi (vtables, callbacks)
 # that analysis did not register as functions. Add entries as codegen or runtime finds them.
-# 8 entries.
+# 10 entries.
 
 [functions]
 # First codegen (ReXGlue 0.10.0.24, 2026-10-22): "UnresolvedCall ... target not in any function".
@@ -15,3 +15,13 @@
 0x84D56958 = {}  # from b @ 0x8470E468
 0x84E26188 = {}  # from b @ 0x84E26FFC
 0x84E295C0 = {}  # from b @ 0x84E29A14
+
+# [CONFIRMED] First native startup calls this address indirectly. Ghidra
+# verifies the complete body is one blr (4E800020), after the CTR trampoline
+# at 0x84DF1834. Preserve the guest no-op return instead of inventing a hook.
+0x84DF1840 = { size = 4 }
+
+# [CONFIRMED] Later native startup calls this target indirectly. Ghidra shows
+# the entry's index check, failure return, and virtual tail call through CTR;
+# the next independent entry begins at 0x84E203B0.
+0x84E20368 = { end = 0x84E203B0 }
