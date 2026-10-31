@@ -79,6 +79,10 @@ gameplay, replay and camera edits correctly, but runs slowly. One player's
 head renders completely black. The supplied screenshot shows a coherent
 court and players, though its paused state cannot alone prove moving gameplay.
 The interactive gameplay result is **[CONFIRMED] by user report**.
+On follow-up, the user identifies the affected player as UGA (number/name
+unknown) and confirms the black head persists in replay. This separates it
+from the live-only black output symptom. The material/texture/shader cause is
+not established.
 
 The matching run folder is `20261031-134017-646-rov`. Its manifest records
 `--render_target_path_d3d12=rov` as the sole rendering override, with executable
