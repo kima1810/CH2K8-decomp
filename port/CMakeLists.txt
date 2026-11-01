@@ -51,6 +51,12 @@ else()
 endif()
 
 rexglue_setup_target(ch2k8 GPU_PLUGINS xenos)
+if(WIN32)
+    # The GPU plugin is loaded dynamically, so an SDK DLL change need not change
+    # an import library. Relink to run the SDK's POST_BUILD DLL staging commands.
+    set_property(TARGET ch2k8 APPEND PROPERTY LINK_DEPENDS
+        "$<TARGET_FILE:rex::gpu-xenos>" "$<TARGET_FILE:rex::runtime>")
+endif()
 # Public Vulkan provider headers reference the RenderDoc application API; the
 # pinned SDK does not install that dependency's header. Use our licensed copy.
 target_include_directories(ch2k8 PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party")

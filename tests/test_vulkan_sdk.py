@@ -29,6 +29,8 @@ def test_prepare_sdk_materializes_windows_links_and_forwards_refresh(tmp_path, m
         raise AssertionError(args)
 
     monkeypatch.setattr(sdk.subprocess, 'check_output', git_output)
+    # Native GPU source validation has its own pinned-source integration tests.
+    monkeypatch.setattr(sdk, 'prepare_native_gpu', lambda source: None)
     sdk.prepare(tmp_path)
     assert link.read_bytes() == target.read_bytes()
     assert 'float(REXCVAR_GET(video_mode_refresh_rate))' in window.read_text()
