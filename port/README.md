@@ -21,6 +21,15 @@ The older `--ch2k8_vector_pack=baseline` fallback still selects the fully retain
 original bodies. The [remaining-hotspots finding](../docs/findings/2026-11-01-remaining-hotspots-and-unpack.md)
 records the additional measured 3–9% routine reductions and remaining store costs.
 
+Aligned vector byte stores are optimized by default within the combined path.
+They retain the original volatile byte widths, address calculation and order;
+unaligned stores use the original loop. Use `--ch2k8_vector_store=baseline` to
+restore the preceding pack/unpack path, or `compare` for interleaved timing.
+The CSV distinguishes `store_optimized`; the summary reports `pack_unpack_store`.
+Selecting baseline packing or unpacking also bypasses the store optimization.
+See the [aligned-store finding](../docs/findings/2026-11-01-aligned-vector-stores.md)
+for the additional measured 14–15% routine reduction and validation limits.
+
 ## Launcher and Vulkan build
 
 Open `Launch CH2K8.cmd` in the repository root for renderer, resolution,
