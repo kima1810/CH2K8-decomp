@@ -10,7 +10,7 @@ def replace_once(text, old, new):
     return text.replace(old, new, 1)
 
 
-def patch_backend(text, backend):
+def patch_backend_constants(text, backend):
     marker = '// CH2K8 native constant cache v1'
     if marker in text:
         text = patch_vulkan_counters(text) if backend == 'vulkan' else text
@@ -39,6 +39,33 @@ def patch_backend(text, backend):
             text = replace_once(text, original, original+f'    ch2k8::RecordConstantUpload(ch2k8::Upload::{kind});\n')
     text = patch_vulkan_counters(text) if backend == 'vulkan' else text
     return patch_changed_usage(text)
+
+
+def patch_backend(text, backend):
+    text = patch_backend_constants(text, backend)
+    if backend != 'd3d12' or '// CH2K8 validate specialized pixel state v3' in text:
+        return text
+    site = '''                             used_texture_mask, normalized_depth_control, normalized_color_mask);
+
+  // Update constant buffers, descriptors and root parameters.'''
+    return replace_once(text, site, '''                             used_texture_mask, normalized_depth_control, normalized_color_mask);
+
+  // CH2K8 validate specialized pixel state v3
+  const auto native_state = pixel_shader_modification.pixel.native_pixel_state;
+  if (pixel_shader && ch2k8::PixelStateEnabled(native_state) &&
+      (ch2k8::PixelFlags(native_state) != (system_constants_.flags & ch2k8::kPixelFlagMask) ||
+       ch2k8::SampleLog2(native_state, 0) != system_constants_.sample_count_log2[0] ||
+       ch2k8::SampleLog2(native_state, 1) != system_constants_.sample_count_log2[1] ||
+       ((system_constants_.edram_rt_keep_mask[0][0] != UINT32_MAX ||
+         system_constants_.edram_rt_keep_mask[0][1] != UINT32_MAX) &&
+        (ch2k8::ColorFormat(native_state) != (system_constants_.edram_rt_format_flags[0] & 15u) ||
+         (ch2k8::HasBlend(native_state) &&
+          system_constants_.edram_rt_blend_factors_ops[0] != ch2k8::BlendControl(native_state)))))) {
+    REXLOG_ERROR("CH2K8 specialized pixel state mismatch");
+    return false;
+  }
+
+  // Update constant buffers, descriptors and root parameters.''')
 
 
 def patch_changed_usage(text):
@@ -146,7 +173,8 @@ def prepare_native_gpu(source):
         else:
             expected = patch_common(original)
         current = path.read_text(encoding='utf-8')
-        if current not in (original, expected):
+        previous = patch_backend_constants(original, 'd3d12') if '/d3d12/' in relative else expected
+        if current not in (original, previous, expected):
             raise ValueError('Unreviewed local GPU SDK changes: '+relative)
         paths[path] = expected
     # Validate every insertion before writing any backend source.

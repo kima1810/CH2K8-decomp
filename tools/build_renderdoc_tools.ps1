@@ -42,7 +42,7 @@ RENDERDOC_OpenCaptureFile
 '@ | Set-Content -LiteralPath $definition -Encoding ascii
 & $dlltool -m i386:x86-64 -d $definition -l $library
 if ($LASTEXITCODE) { throw "Import-library generation failed: $LASTEXITCODE" }
-foreach ($name in @('capture','replay','timeline')) {
+foreach ($name in @('capture','replay','timeline','shader_probe','shader_compare')) {
     $source = Join-Path $PSScriptRoot ('renderdoc_'+$name+'.cpp')
     $executable = Join-Path $RenderDoc ('ch2k8_'+$name+'.exe')
     & $compiler -std=c++17 -O2 -DRENDERDOC_PLATFORM_WIN32 -DNOMINMAX -isystem $Headers $source $library -o $executable

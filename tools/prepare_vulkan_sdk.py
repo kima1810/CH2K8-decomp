@@ -3,6 +3,7 @@ import argparse
 import subprocess
 from pathlib import Path
 from prepare_native_gpu_sdk import prepare_native_gpu
+from prepare_native_shader_sdk import prepare_native_shaders
 
 PIN = 'bd833a2ab69d305f99ddf57418fc38ffec8af93d'
 
@@ -13,6 +14,7 @@ def prepare(source):
     if revision != PIN:
         raise ValueError(f'Expected pinned SDK {PIN}, got {revision}')
     prepare_native_gpu(source)
+    prepare_native_shaders(source)
     # Windows Git may check out symlinks as small text files. Materialize only
     # libmspack's tracked file links, using the target recorded in Git and
     # requiring both ends to remain inside that dependency.

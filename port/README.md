@@ -48,6 +48,16 @@ randomized packet timing. Run `tools/build_vulkan_sdk.ps1` to apply the checked
 SDK patches; the original binary-only SDK does not contain these controls.
 See the [native-state finding](../docs/findings/2026-11-01-native-constant-state.md).
 
+The patched D3D12 ROV backend also specializes pixel shaders to exact MSAA,
+depth-format, alpha-test, RT0 format and supported blend state. This removes
+generic Xbox shader branches while preserving the existing rendering path.
+It is enabled by default; `--no-ch2k8_native_pixel_state` restores the original
+dynamic shader path. Other targets and unfamiliar blend modes retain dynamic
+handling. Vulkan is unchanged by this shader optimization. The
+[pixel-specialization finding](../docs/findings/2026-11-01-native-pixel-specialization.md)
+records byte-identical EDRAM checks and a controlled 27% reduction in the leading
+draw's GPU time, not a displayed-FPS claim.
+
 For autonomous GPU comparisons, run `tools/benchmark_gpu_path.ps1 -Profile vulkan-fsi`
 from PowerShell. It stops its own game after 210 seconds and records native
 images, guest submission cadence, CPU samples and optional local AMD telemetry.

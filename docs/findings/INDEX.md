@@ -1,5 +1,7 @@
 # Findings index
 
+- [2026-11-01 Native pixel specialization](2026-11-01-native-pixel-specialization.md): exact draw-state variants remove generic ROV format/blend work; same-capture replay verifies byte-identical EDRAM and measures 27% less time for the leading draw, 8.8% less summed GPU work when replacing that one shader. Enabled for D3D12 ROV; same-build normal submission cadence remains about 40.5 ms with either setting.
+
 - [2026-11-01 Proven native RAM stores](2026-11-01-proven-native-ram-stores.md): fresh profiling locates nearly a full worker core in three vertex routines; per-job bounds proof enables native stores in two routines, reducing their paired work costs 18–19%. Whole-game high FPS remains unestablished.
 
 - [2026-11-01 Native constant state and packet decoding](2026-11-01-native-constant-state.md): cache skips 61% of shader-update requests; interleaved bulk decoding costs 71% less per word. Add native/accurate launcher choices and reliable DLL staging. Vulkan FBO black frames reproduce with optimizations disabled; Automatic selects ROV/FSI.
