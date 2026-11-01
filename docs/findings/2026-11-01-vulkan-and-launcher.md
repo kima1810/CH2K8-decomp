@@ -128,6 +128,12 @@ the built-in readback API provides the alternative validation path.
 
 ## Conclusion and open questions
 
+The [later GPU-backend investigation](2026-11-01-gpu-backend-investigation.md)
+extends Vulkan FBO and FSI validation to live demo gameplay, with visible HUDs
+and advancing clocks after the CPU optimizations. It also compares the native
+D3D12 paths. Full exhibition completion and Legacy/save behavior remain open;
+API selection alone still has no verified large performance gain.
+
 Vulkan uses native host Vulkan through the existing Xenos-to-SPIR-V runtime.
 Rendering correctness, performance, full-game completion and Legacy/save
 behavior require runtime evidence; no speedup is implied by changing APIs.

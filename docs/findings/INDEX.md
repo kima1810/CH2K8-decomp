@@ -1,5 +1,7 @@
 # Findings index
 
+- [2026-11-01 Native GPU backend investigation](2026-11-01-gpu-backend-investigation.md): current Vulkan FBO/FSI and D3D12 RTV reach live demo play; roughly 55–60 ms guest submissions persist. Batching has no verified gain. Add bounded remote GPU experiments with native readbacks, CPU/AMD telemetry, profile validation and explicit comparison limits.
+
 - [2026-11-01 Aligned vector byte stores](2026-11-01-aligned-vector-stores.md): preserve ordered volatile byte writes while removing aligned-loop overhead at 48 sites. Interleaved rendering measures another 14–15% lower routine work cost; 252 full-function comparisons and address/alias traces validate the candidate. Whole-game FPS gains remain unestablished.
 
 - [2026-11-01 Remaining CPU hotspots and unpack](2026-11-01-remaining-hotspots-and-unpack.md): fresh 300-round sampling attributes 41% of guest samples to byte-store loops and 16% to unpacking. Bit-equivalent SIMD unpacking reduces whole-routine work costs another 3–9% against pack-only, with checksummed PDB/source attribution and 72 full-function comparisons.

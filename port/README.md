@@ -32,6 +32,15 @@ for the additional measured 14–15% routine reduction and validation limits.
 
 ## Launcher and Vulkan build
 
+For autonomous GPU comparisons, run `tools/benchmark_gpu_path.ps1 -Profile vulkan-fsi`
+from PowerShell. It stops its own game after 210 seconds and records native
+images, guest submission cadence, CPU samples and optional local AMD telemetry.
+Other profiles include `d3d12-rov`, `d3d12-rtv`, `vulkan-fbo` and explicit
+`-batched` experiments; `-ValidateOnly` emits arguments without launching.
+Summarize with `tools/summarize_gpu_run.py RUN_DIRECTORY`. These demos do not
+lock matchup/camera state. See the [GPU backend finding](../docs/findings/2026-11-01-gpu-backend-investigation.md)
+for measured results and native-renderer limits. Normal renderer defaults are unchanged.
+
 Open `Launch CH2K8.cmd` in the repository root for renderer, resolution,
 refresh rate, window mode and extracted game-folder controls. D3D12 uses the
 working ROV path. Vulkan is an experimental native backend through the pinned
