@@ -14,6 +14,27 @@ struct Module {
 int main(int argc, char **argv) {
   if (argc < 3)
     return 1;
+  int samples = 30, interval = 100;
+  std::vector<DWORD> requested;
+  for (int i = 2; i < argc; ++i) {
+    if (!strcmp(argv[i], "--samples") || !strcmp(argv[i], "--interval")) {
+      bool count = !strcmp(argv[i], "--samples");
+      if (++i >= argc)
+        return 1;
+      if (count)
+        samples = atoi(argv[i]);
+      else
+        interval = atoi(argv[i]);
+    } else {
+      DWORD tid = atoi(argv[i]);
+      if (!tid)
+        return 1;
+      requested.push_back(tid);
+    }
+  }
+  if (requested.empty() || samples < 1 || samples > 1000 || interval < 1 ||
+      interval > 1000 || samples * interval > 30000)
+    return 1;
   DWORD pid = atoi(argv[1]);
   HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
   if (!process)
@@ -50,9 +71,8 @@ int main(int argc, char **argv) {
     } while (Module32Next(snapshot, &m));
   CloseHandle(snapshot);
   puts("sample,thread,module,rva");
-  for (int sample = 0; sample < 30; ++sample) {
-    for (int i = 2; i < argc; ++i) {
-      DWORD tid = atoi(argv[i]);
+  for (int sample = 0; sample < samples; ++sample) {
+    for (DWORD tid : requested) {
       if (std::find(allowed.begin(), allowed.end(), tid) == allowed.end())
         continue;
       HANDLE t = OpenThread(THREAD_GET_CONTEXT | THREAD_SUSPEND_RESUME |
@@ -60,6 +80,10 @@ int main(int argc, char **argv) {
                             FALSE, tid);
       if (!t)
         continue;
+      if (GetProcessIdOfThread(t) != pid) {
+        CloseHandle(t);
+        continue;
+      }
       CONTEXT c{};
       c.ContextFlags = CONTEXT_CONTROL;
       bool got = false;
@@ -81,7 +105,7 @@ int main(int argc, char **argv) {
                (unsigned long long)(c.Rip - base));
       }
     }
-    Sleep(100);
+    Sleep(interval);
   }
   return 0;
 }

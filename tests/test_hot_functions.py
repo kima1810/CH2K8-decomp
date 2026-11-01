@@ -8,19 +8,21 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT/'tools'))
-from optimize_codegen import optimize_source, scalar_pack, TARGETS
+from optimize_codegen import optimize_source, scalar_pack, scalar_unpack, TARGETS, restore_source
 from catalog_hot_functions import catalog
 from summarize_hot_functions import summarize
 
 
 def test_fast_variants_are_scoped_idempotent_and_reject_unreviewed_shapes():
-    body = 'DEFINE_REX_FUNC(sub_84723778) {\n' + '\n'.join(
-        scalar_pack(f'v{i}', 'v0', i % 2) for i in range(16)) + '\n}\n'
+    body = 'DEFINE_REX_FUNC(sub_84723778) {\n\tREX_FUNC_PROLOGUE();\n' + '\n'.join(
+        scalar_pack(f'v{i}', 'v0', i % 2) for i in range(16)) + '\n' + scalar_unpack('v22', 'v23') + '\n}\n'
     transformed, count = optimize_source(body)
     assert count == 16
-    assert transformed.count('Ch2k8PackBiased64(') == 16
-    assert transformed.count('Ch2k8HotScope hot(') == 2
+    assert transformed.count('Ch2k8PackBiased64(') == 32
+    assert transformed.count('Ch2k8UnpackBiased64(') == 1
+    assert transformed.count('Ch2k8HotScope hot(') == 3
     assert optimize_source(transformed) == (transformed, 0)
+    assert restore_source(transformed) == body
     unrelated = body.replace('sub_84723778', 'sub_12345678')
     assert optimize_source(unrelated) == (unrelated, 0)
     with pytest.raises(ValueError, match='unexpected pack shape'):
@@ -110,6 +112,9 @@ def test_complete_generated_hot_functions_preserve_context_and_guest_writes(tmp_
             if signature in text:
                 start = text.index(signature)
                 fast[address] = text[start:text.index('\n}\n', start)+3]
+                signature = f'static void sub_{address}_unpack_fast('
+                start = text.index(signature)
+                fast[address+'_unpack'] = text[start:text.index('\n}\n', start)+3]
                 start = text.index(f'DEFINE_REX_FUNC(sub_{address}) {{')
                 body = text[start:text.index('\n}\n', start)+3]
                 bodies[f'sub_{address}'] = body
@@ -131,8 +136,10 @@ def test_complete_generated_hot_functions_preserve_context_and_guest_writes(tmp_
 #include <cstring>
 #include <vector>
 bool selected = false;
+bool selected_unpack = false;
 bool Ch2k8SelectFastVectorPack(unsigned) { return selected; }
-Ch2k8HotScope::Ch2k8HotScope(unsigned,uint32_t,uint8_t*,bool) {}
+bool Ch2k8SelectFastVectorUnpack(unsigned) { return selected_unpack; }
+Ch2k8HotScope::Ch2k8HotScope(unsigned,uint32_t,uint8_t*,bool,bool) {}
 Ch2k8HotScope::~Ch2k8HotScope() {}
 '''
     main = '''
@@ -152,16 +159,19 @@ int main() {
   put(job+116,0x60000+(trial%4)*4);
   for(uint32_t group=0;group<groups;++group) put(0x30004+group*12,(units<<16)|(group*128));
   PPCContext a{},b{};a.r1.u64=0x180000;a.r3.u64=job;a.lr=0x12345678;
-  a.fpscr.csr=0x1F80;b=a;
+  a.fpscr.csr=0x1F80;const auto initial_context=a;b=a;
   std::memcpy(memory,initial.data(),bytes);simde_mm_setcsr(0x1F80);selected=false;
   functions[f](a,memory);std::memcpy(expected.data(),memory,bytes);
-  std::memcpy(memory,initial.data(),bytes);simde_mm_setcsr(0x1F80);selected=true;
-  functions[f](b,memory);
-  if(std::memcmp(&a,&b,sizeof(a)) || std::memcmp(expected.data(),memory,bytes)) {
-   printf("Mismatch function=%u trial=%u\\n",f,trial);return 2;
+  for(unsigned variant=0;variant<2;++variant) {
+   b=initial_context;
+   std::memcpy(memory,initial.data(),bytes);simde_mm_setcsr(0x1F80);selected=true;selected_unpack=variant;
+   functions[f](b,memory);
+   if(std::memcmp(&a,&b,sizeof(a)) || std::memcmp(expected.data(),memory,bytes)) {
+    printf("Mismatch function=%u trial=%u variant=%u\\n",f,trial,variant);return 2;
+   }
   }
  }
- VirtualFree(memory,0,MEM_RELEASE);puts("36 complete function comparisons passed");
+ VirtualFree(memory,0,MEM_RELEASE);puts("72 complete function comparisons passed");
 }
 '''
     source = tmp_path/'whole_functions.cpp'
@@ -175,4 +185,4 @@ int main() {
     assert compilation.returncode == 0, compilation.stderr
     result = subprocess.run([str(executable)], capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert '36 complete function comparisons passed' in result.stdout
+    assert '72 complete function comparisons passed' in result.stdout

@@ -12,14 +12,15 @@ def summarize(path, start=0, end=float('inf')):
         for row in csv.DictReader(stream):
             if not start <= float(row['elapsed_ms'])/1000 < end:
                 continue
-            total = totals[(row['function'], row['optimized'])]
+            variant = 'pack_unpack' if row.get('unpack_optimized') == '1' else 'optimized' if row['optimized'] == '1' else 'baseline'
+            total = totals[(row['function'], variant)]
             for key in total:
                 total[key] += int(row[key])
     result = {}
-    for (address, fast), total in sorted(totals.items()):
+    for (address, variant), total in sorted(totals.items()):
         total['ns_per_call'] = total['wall_ns']/total['calls'] if total['calls'] else None
         total['ns_per_work_unit'] = total['wall_ns']/total['work_units'] if total['work_units'] else None
-        result.setdefault(address, {})['optimized' if fast == '1' else 'baseline'] = total
+        result.setdefault(address, {})[variant] = total
     return result
 
 

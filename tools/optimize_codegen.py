@@ -8,7 +8,8 @@ import re
 from pathlib import Path
 
 TARGETS = ('84723778', '84723CC0', '84724930')
-MARKER = '// CH2K8 measured packed-vector variants'
+OLD_MARKER = '// CH2K8 measured packed-vector variants'
+MARKER = OLD_MARKER + ' v2'
 
 
 def scalar_pack(dst, src, half):
@@ -27,9 +28,56 @@ def scalar_pack(dst, src, half):
     return '\n'.join(lines)
 
 
-def optimize_source(text):
-    if MARKER in text:
-        return text, 0
+def scalar_unpack(dst, src):
+    lines = [f'\t// vupkd3d128 {dst},{src},24', f'\tvTemp.u64[0] = ctx.{src}.u64[0];']
+    for lane, shift in zip((3, 2, 1), (44, 24, 4)):
+        lines += [f'\ttemp.s32 = (int64_t(vTemp.u64[0] << {shift}) >> 44);',
+                  f'\tctx.{dst}.u32[{lane}] = temp.s32 == -524288 ? 0x7FC00000u : uint32_t(temp.s32 + 0x40400000);']
+    lines.append(f'\tctx.{dst}.u32[0] = uint32_t(vTemp.u64[0] >> 60) + 0x3F800000u;')
+    return '\n'.join(lines)
+
+
+def dispatch(signature, address, index, version=2):
+    if version == 1:
+        return (signature + '\n' + f'\tif (Ch2k8SelectFastVectorPack({index})) {{\n'
+                f'\t\tsub_{address}_fast(ctx, base);\n\t\treturn;\n\t}}\n'
+                f'\tCh2k8HotScope hot({index}, ctx.r3.u32, base, false);\n')
+    return (signature + '\n' + f'\tif (Ch2k8SelectFastVectorPack({index})) {{\n'
+            f'\t\tif (Ch2k8SelectFastVectorUnpack({index})) {{\n'
+            f'\t\t\tsub_{address}_unpack_fast(ctx, base);\n\t\t}} else {{\n'
+            f'\t\t\tsub_{address}_fast(ctx, base);\n\t\t}}\n\t\treturn;\n\t}}\n'
+            f'\tCh2k8HotScope hot({index}, ctx.r3.u32, base, false);\n')
+
+
+def restore_source(text):
+    if OLD_MARKER not in text:
+        return text
+    marker = text.splitlines()[0]
+    if marker not in (OLD_MARKER, MARKER):
+        raise ValueError('Unknown hot-function transform version')
+    for index, address in enumerate(TARGETS):
+        signature = f'DEFINE_REX_FUNC(sub_{address}) {{'
+        if signature not in text:
+            continue
+        start = text.index(signature)
+        end = text.index('\n}\n', start) + 3
+        body = text[start:end]
+        expected = dispatch(signature, address, index, 2 if marker == MARKER else 1)
+        if not body.startswith(expected + '\tREX_FUNC_PROLOGUE();'):
+            raise ValueError(f'{address}: unrecognized retained baseline dispatcher')
+        text = text[:start] + signature + '\n' + body[len(expected):] + text[end:]
+        for suffix in ('fast', 'unpack_fast'):
+            pattern = (rf'static void sub_{address}_{suffix}\(PPCContext& __restrict ctx, '
+                       r'uint8_t\* base\) \{\n.*?\n\}\n\n?')
+            text, removed = re.subn(pattern, '', text, flags=re.S)
+            required = suffix == 'fast' or marker == MARKER
+            if removed != int(required):
+                raise ValueError(f'{address}: unexpected {suffix} copy count')
+    return text.replace(marker+'\n#include "packed_vector_optimized.h"\n', '', 1)
+
+
+def optimize_source(original_text):
+    text = restore_source(original_text)
     total = 0
     for index, address in enumerate(TARGETS):
         signature = f'DEFINE_REX_FUNC(sub_{address}) {{'
@@ -50,18 +98,29 @@ def optimize_source(text):
             replacement = (f'\t// vpkd3d128 {dst},{src},6,2,{shift} (integer SIMD)\n'
                            f'\tCh2k8PackBiased64(ctx.{dst}, ctx.{src}, temp, vTemp, {half});')
             optimized = optimized.replace(original, replacement, 1)
+        unpacked = optimized
+        unpack_sites = re.findall(r'\t// vupkd3d128 (v\d+),(v\d+),24\n', body)
+        if not unpack_sites:
+            raise ValueError(f'{address}: missing verified unpack sites')
+        for dst, src in unpack_sites:
+            scalar = scalar_unpack(dst, src)
+            if unpacked.count(scalar) != 1:
+                raise ValueError(f'{address}: unexpected unpack shape {dst}/{src}')
+            unpacked = unpacked.replace(scalar,
+                f'\t// vupkd3d128 {dst},{src},24 (integer SIMD)\n'
+                f'\tCh2k8UnpackBiased64(ctx.{dst}, ctx.{src}, temp, vTemp);', 1)
+        unpacked = unpacked.replace(signature,
+            f'static void sub_{address}_unpack_fast(PPCContext& __restrict ctx, uint8_t* base) {{\n'
+            f'\tCh2k8HotScope hot({index}, ctx.r3.u32, base, true, true);', 1)
         optimized = optimized.replace(signature,
             f'static void sub_{address}_fast(PPCContext& __restrict ctx, uint8_t* base) {{\n'
             f'\tCh2k8HotScope hot({index}, ctx.r3.u32, base, true);', 1)
-        baseline = body.replace(signature, signature + '\n'
-            f'\tif (Ch2k8SelectFastVectorPack({index})) {{\n'
-            f'\t\tsub_{address}_fast(ctx, base);\n\t\treturn;\n\t}}\n'
-            f'\tCh2k8HotScope hot({index}, ctx.r3.u32, base, false);', 1)
-        text = text[:start] + optimized + '\n' + baseline + text[end:]
+        baseline = body.replace(signature+'\n', dispatch(signature, address, index), 1)
+        text = text[:start] + optimized + '\n' + unpacked + '\n' + baseline + text[end:]
         total += len(sites)
     if total:
         text = MARKER + '\n#include "packed_vector_optimized.h"\n' + text
-    return text, total
+    return text, total if text != original_text else 0
 
 
 def optimize_directory(generated: Path):
