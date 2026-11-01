@@ -4,7 +4,7 @@ Run one CH2K8 rendering comparison and preserve its settings and CPU samples.
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('baseline', 'rov', 'rov-ui', 'synchronous')]
+    [ValidateSet('baseline', 'rov', 'rov-ui', 'synchronous', 'vulkan', 'vulkan-fsi')]
     [string]$Profile = 'rov',
     [string]$Executable,
     [string]$GameData,
@@ -15,7 +15,10 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-if (-not $Executable) { $Executable = Join-Path $repoRoot 'port/out/build/win-amd64/ch2k8.exe' }
+if (-not $Executable) {
+    $preset = if ($Profile -like 'vulkan*') { 'win-amd64-vulkan' } else { 'win-amd64' }
+    $Executable = Join-Path $repoRoot "port/out/build/$preset/ch2k8.exe"
+}
 if (-not $GameData) { $GameData = Join-Path $repoRoot 'work/ch2k8/XBOX/disc' }
 if (-not $UserData) { $UserData = Join-Path $repoRoot 'port/userdata' }
 if (-not $PresentMon) { $PresentMon = Join-Path $repoRoot 'work/tooling/presentmon/PresentMon-2.6.0-x64.exe' }
@@ -40,6 +43,8 @@ switch ($Profile) {
     'rov' { $arguments += '--render_target_path_d3d12=rov' }
     'rov-ui' { $arguments += '--render_target_path_d3d12=rov'; $arguments += '--no-host_present_from_non_ui_thread' }
     'synchronous' { $arguments += '--no-async_shader_compilation' }
+    'vulkan' { $arguments += '--ch2k8_renderer=vulkan' }
+    'vulkan-fsi' { $arguments += @('--ch2k8_renderer=vulkan', '--render_target_path_vulkan=fsi') }
 }
 @{
     profile = $Profile

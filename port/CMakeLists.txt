@@ -29,9 +29,18 @@ file(CONFIGURE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/rexglue.cmake"
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CH2K8_SDK_CMAKE}")
 include("${CMAKE_CURRENT_BINARY_DIR}/rexglue.cmake")
 
+option(CH2K8_REQUIRE_VULKAN "Require a Vulkan-capable installed SDK" OFF)
+if(CH2K8_REQUIRE_VULKAN)
+    get_target_property(CH2K8_SDK_DEFINITIONS rex::runtime INTERFACE_COMPILE_DEFINITIONS)
+    if(NOT "REX_HAS_VULKAN=1" IN_LIST CH2K8_SDK_DEFINITIONS)
+        message(FATAL_ERROR "Vulkan SDK required. Run tools/build_vulkan_sdk.ps1 first; the default Windows SDK is D3D12-only.")
+    endif()
+endif()
+
 set(CH2K8_SOURCES
     src/main.cpp
     src/frame_timing.cpp
+    src/output_capture.cpp
 )
 
 if(WIN32)
@@ -41,6 +50,9 @@ else()
 endif()
 
 rexglue_setup_target(ch2k8 GPU_PLUGINS xenos)
+# Public Vulkan provider headers reference the RenderDoc application API; the
+# pinned SDK does not install that dependency's header. Use our licensed copy.
+target_include_directories(ch2k8 PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 target_compile_definitions(ch2k8 PRIVATE CH2K8_VERSION="${PROJECT_VERSION}")
 if(WIN32)
     # Preserve the generated code's line tables in a PDB for startup debugging.
