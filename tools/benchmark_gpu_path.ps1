@@ -18,6 +18,7 @@ param(
     [switch]$HotFunctions,
     [ValidateSet('default','baseline','optimized','compare')][string]$RamStore = 'default',
     [ValidateSet('default','baseline','optimized')][string]$PixelState = 'default',
+    [ValidateSet('default','baseline','optimized')][string]$GuardedVectorStore = 'default',
     [switch]$ValidateOnly
 )
 $ErrorActionPreference = 'Stop'
@@ -56,6 +57,9 @@ if ($GpuStats) { $arguments += '--ch2k8_gpu_stats' }
 if ($PacketCompare) { $arguments += '--ch2k8_packet_compare' }
 if ($HotFunctions) { $arguments += "--ch2k8_hot_log=$(Join-Path $runRoot 'hot-functions.csv')" }
 if ($RamStore -ne 'default') { $arguments += "--ch2k8_ram_store=$RamStore" }
+if ($GuardedVectorStore -ne 'default') {
+    $arguments += if ($GuardedVectorStore -eq 'optimized') {'--ch2k8_guarded_vector_store'} else {'--no-ch2k8_guarded_vector_store'}
+}
 if ($PixelState -ne 'default') {
     if ($backend -ne 'd3d12') {throw 'PixelState specialization currently requires D3D12.'}
     $arguments += if ($PixelState -eq 'optimized') {'--ch2k8_native_pixel_state'} else {'--no-ch2k8_native_pixel_state'}

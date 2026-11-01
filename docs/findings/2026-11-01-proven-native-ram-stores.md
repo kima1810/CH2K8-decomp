@@ -100,6 +100,11 @@ values, partial writes, backedges, and the exact two locally proven functions.
 Both normal and dual-backend Release builds succeed.
 The suite passes 82 tests, with one environment-dependent skip.
 
+The subsequent [guarded-vector finding](2026-11-01-guarded-vector-output.md)
+extends widening to the third routine using checked reload values, without
+assuming that guest-stack contents remain stable. Its newer tests and controls
+supersede the earlier third-routine limitation above.
+
 `--ch2k8_ram_store=baseline|optimized|compare` controls this path independently
 within the existing combined pack/unpack/store optimization. Opt-in hot logs
 add `ram_optimized`, native instruction counts and fallback counts; the summary

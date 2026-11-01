@@ -13,6 +13,7 @@ std::atomic<int> mode{0}; // baseline, optimized, interleaved comparison
 std::atomic<int> unpack_mode{0};
 std::atomic<int> store_mode{0};
 std::atomic<int> ram_mode{0};
+std::atomic<bool> guarded_store_enabled{true};
 std::atomic<bool> profiling{false};
 std::mutex output_mutex;
 std::FILE *output = nullptr;
@@ -62,11 +63,13 @@ void flush(uint64_t now) {
 } // namespace
 
 void Ch2k8ConfigureHotFunctions(int selected_mode, int selected_unpack,
-                                int selected_store, int selected_ram, const char *path) {
+                                int selected_store, int selected_ram,
+                                bool selected_guarded_store, const char *path) {
   mode.store(selected_mode, std::memory_order_release);
   unpack_mode.store(selected_unpack, std::memory_order_release);
   store_mode.store(selected_store, std::memory_order_release);
   ram_mode.store(selected_ram, std::memory_order_release);
+  guarded_store_enabled.store(selected_guarded_store, std::memory_order_release);
   if (!path || !*path)
     return;
   std::lock_guard lock(output_mutex);
@@ -125,6 +128,7 @@ bool Ch2k8SelectFastVectorStore(unsigned index) {
   return bool(state & 1);
 }
 bool Ch2k8SelectFastRamStore(unsigned index) {
+  if (index == 2 && !guarded_store_enabled.load(std::memory_order_acquire)) return false;
   const auto selected=ram_mode.load(std::memory_order_acquire);
   if(selected!=2) return selected==1;
   auto &state=ram_selection[index];

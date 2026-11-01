@@ -1,5 +1,7 @@
 # Findings index
 
+- [2026-11-01 Guarded vector output](2026-11-01-guarded-vector-output.md): two checked stack reloads unlock native stores in the third hot vector routine; paired work cost falls 17.35%, with 384 complete routine comparisons including forced fallbacks. D3D12 ROV and Vulkan FSI render correctly; an isolated same-build control records 34.8 ms enabled versus 50.5 ms disabled, with different demo scenes.
+
 - [2026-11-01 Native pixel specialization](2026-11-01-native-pixel-specialization.md): exact draw-state variants remove generic ROV format/blend work; same-capture replay verifies byte-identical EDRAM and measures 27% less time for the leading draw, 8.8% less summed GPU work when replacing that one shader. Enabled for D3D12 ROV; same-build normal submission cadence remains about 40.5 ms with either setting.
 
 - [2026-11-01 Proven native RAM stores](2026-11-01-proven-native-ram-stores.md): fresh profiling locates nearly a full worker core in three vertex routines; per-job bounds proof enables native stores in two routines, reducing their paired work costs 18–19%. Whole-game high FPS remains unestablished.

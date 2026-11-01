@@ -64,3 +64,30 @@ def test_ram_summary_separates_variants_and_counts_fallbacks(tmp_path):
     assert result['native_ram']['byte_stores']==100
     assert result['native_ram']['ns_per_work_unit']==20
     assert result['pack_unpack_store']['ns_per_work_unit']==40
+
+
+def test_guarded_store_fallback_keeps_preceding_native_paths_enabled(tmp_path):
+    compiler=shutil.which('clang++');sdk=ROOT/'port/sdk/include'
+    if not compiler or not sdk.is_dir():pytest.skip('Requires local compiler/SDK')
+    source=tmp_path/'selector.cpp'
+    source.write_text('''
+#include "packed_vector_optimized.h"
+void Ch2k8ConfigureHotFunctions(int,int,int,int,bool,const char*);
+int main() {
+ Ch2k8ConfigureHotFunctions(1,1,1,1,false,nullptr);
+ if(!Ch2k8SelectFastRamStore(0)||!Ch2k8SelectFastRamStore(1)||Ch2k8SelectFastRamStore(2)) return 1;
+ Ch2k8ConfigureHotFunctions(1,1,1,1,true,nullptr);
+ if(!Ch2k8SelectFastRamStore(2)) return 2;
+ Ch2k8ConfigureHotFunctions(1,1,1,0,true,nullptr);
+ for(unsigned i=0;i<3;++i) if(Ch2k8SelectFastRamStore(i)) return 3;
+ Ch2k8ConfigureHotFunctions(1,1,1,2,false,nullptr);
+ for(unsigned i=0;i<128;++i) if(Ch2k8SelectFastRamStore(2)) return 4;
+}
+''')
+    executable=tmp_path/'selector.exe'
+    result=subprocess.run([compiler,'-std=c++23','-O2','-msse4.1','-DNOMINMAX',
+        '-DSPDLOG_FMT_EXTERNAL','-DSPDLOG_COMPILED_LIB','-I',str(ROOT/'port/src'),'-I',str(sdk),
+        str(source),str(ROOT/'port/src/hot_functions.cpp'),'-o',str(executable)],capture_output=True,text=True)
+    assert result.returncode==0,result.stderr
+    result=subprocess.run([str(executable)],capture_output=True,text=True)
+    assert result.returncode==0,result.stdout+result.stderr

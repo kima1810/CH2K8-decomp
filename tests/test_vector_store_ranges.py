@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
-from prove_vector_store_ranges import prove_store_span, transfer, TOP
+from prove_vector_store_ranges import prove_store_span, prove_guarded_store_span, transfer, TOP
 from optimize_codegen import restore_source
 import pytest
 
@@ -45,6 +45,22 @@ def test_scalar_transfer_never_assumes_high_bits_of_partial_write():
     state = [(TOP, 0)] * 32
     assert transfer('ctx.r4.u32 = 0;', state)[4][0] == TOP
     assert transfer('ctx.r4.u64 = REX_LOAD_U16(0);', state)[4] == (65535, 0)
+
+
+def test_guarded_reload_is_checked_without_assuming_stable_stack_memory():
+    text='\n'.join([
+        '\tctx.r11.u64 = REX_LOAD_U32(ctx.r3.u32 + 116);',
+        '\tctx.r9.u64 = REX_LOAD_U32(ctx.r1.u32 + -356);',
+        '\t// stvlx v1,r11,r9',
+        '\tea = ctx.r11.u32 + ctx.r9.u32;', '\treturn;'])
+    assert prove_store_span(text) is None
+    proof=prove_guarded_store_span(text)
+    assert proof['span']==40960 and proof['maximum_offset']==40944
+    assert proof['guards']==[{'load':text.splitlines()[1],'register':9,'maximum':40944}]
+    assert prove_guarded_store_span(text.replace('r1.u32 + -356','r5.u32 + -356')) is None
+    assert prove_guarded_store_span(text.replace('// stvlx v1,r11,r9','// stvlx v1,r11,r8')) is None
+    assert prove_guarded_store_span('loc_ABCD:\n'+text.replace('\treturn;','\tif (condition) goto loc_ABCD;\n\treturn;')) is None
+    assert prove_guarded_store_span(text.replace('\tctx.r9.u64 =', '\tif (condition) {\n\tctx.r9.u64 =').replace('\t// stvlx','\t}\n\t// stvlx')) is None
 
 
 def test_local_generated_routines_have_only_two_proven_spans():

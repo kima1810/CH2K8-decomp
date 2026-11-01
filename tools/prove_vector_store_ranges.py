@@ -62,11 +62,16 @@ def transfer(line, state):
     return out
 
 
-def prove_store_span(body):
+def prove_store_span(body, *, _checked_loads=None):
     lines=body.splitlines()
     if re.search(r'\bswitch\b|\bwhile\s*\(|__try|REX_CALL_',body):return None
     for i,line in enumerate(lines):
         if line.strip().startswith('//'):continue
+        if re.search(r'\bgoto\b',line) and not re.search(r'goto loc_[0-9A-F]+;',line):return None
+        # Generated branches are explicit gotos. Do not infer unconditional
+        # register facts through unfamiliar structured C++ conditionals.
+        if re.match(r'\s*if\b',line) and not line.rstrip().endswith(';'):return None
+        if re.match(r'\s*else\b',line):return None
         if re.search(r'\b(?:for|do)\b',line):
             # The generator's byte-store loop changes no guest registers.
             if line.strip() != 'for (size_t i = 0; i < (16 - (ea & 0xF)); i++)':
@@ -100,6 +105,10 @@ def prove_store_span(body):
             observed[i]=max(observed.get(i,0),bound)
         line=lines[i]
         outgoing=transfer(line,state)
+        if _checked_loads and i in _checked_loads:
+            register,bound,alignment=_checked_loads[i]
+            outgoing=list(outgoing)
+            outgoing[register]=(bound,alignment)
         branch=re.search(r'goto (loc_[0-9A-F]+);',line)
         edges=[]
         if branch:
@@ -122,3 +131,36 @@ def prove_store_span(body):
     # Every partial stvlx ends at its 16-byte block boundary.
     span=(maximum+16+15)&~15
     return {'span':span,'maximum_offset':maximum,'sites':len(stores)}
+
+
+def prove_guarded_store_span(body):
+    """Conditional proof: exact stack-to-store reloads need emitted checks.
+
+    No stored stack value is assumed stable. The guard checks the value after
+    its original volatile load, and permanently disables widening on failure.
+    """
+    unguarded=prove_store_span(body)
+    if unguarded:
+        return {**unguarded, 'guards': []}
+    lines=body.splitlines(); checked={}; guards=[]
+    base_load='\tctx.r11.u64 = REX_LOAD_U32(ctx.r3.u32 + 116);'
+    if lines.count(base_load)!=1:return None
+    loaded=lines.index(base_load)
+    labels={line[:-1]:i for i,line in enumerate(lines) if re.fullmatch(r'loc_[0-9A-F]+:',line)}
+    for i,line in enumerate(lines):
+        branch=re.search(r'goto (loc_[0-9A-F]+);',line)
+        # A failed check must not be followed by another span initialization.
+        if branch and i>loaded and labels.get(branch[1],loaded)<=loaded:return None
+    # Eligibility window only: larger legal stack offsets retain byte stores.
+    limit=40944
+    for i,line in enumerate(lines):
+        match=re.fullmatch(r'\s*ctx\.r(\d+)\.u64 = REX_LOAD_U32\(ctx\.r1\.u32 \+ (-?\d+)\);',line)
+        if not match or i<=loaded or i+2>=len(lines):continue
+        register=int(match[1])
+        if not re.fullmatch(r'\s*// stvlx v\d+,r11,r'+str(register),lines[i+1]):continue
+        if lines[i+2].strip()!=f'ea = ctx.r11.u32 + ctx.r{register}.u32;':continue
+        checked[i]=(register,limit,2)
+        guards.append({'load':line,'register':register,'maximum':limit})
+    if not guards:return None
+    proof=prove_store_span(body,_checked_loads=checked)
+    return {**proof,'guards':guards} if proof else None

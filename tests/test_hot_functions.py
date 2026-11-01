@@ -145,12 +145,22 @@ bool selected = false;
 bool selected_unpack = false;
 bool selected_store = false;
 bool selected_ram = false;
+bool inject_stack_load = false;
+uint32_t injected_address = 0, injected_value = 0;
+uint64_t last_wide = 0, last_bytes = 0;
+inline uint32_t Load32ForTest(uint8_t *base, uint32_t address) {
+ if(inject_stack_load && address==injected_address) return injected_value;
+ auto host=base+uint64_t(address)+(address>=0xE0000000u?4096:0);
+ return __builtin_bswap32(*reinterpret_cast<volatile uint32_t*>(host));
+}
+#undef REX_LOAD_U32
+#define REX_LOAD_U32(address) Load32ForTest(base,uint32_t(address))
 bool Ch2k8SelectFastVectorPack(unsigned) { return selected; }
 bool Ch2k8SelectFastVectorUnpack(unsigned) { return selected_unpack; }
 bool Ch2k8SelectFastVectorStore(unsigned) { return selected_store; }
 bool Ch2k8SelectFastRamStore(unsigned) { return selected_ram; }
-Ch2k8HotScope::Ch2k8HotScope(unsigned,uint32_t,uint8_t*,bool,bool,bool,bool,const uint64_t*) {}
-Ch2k8HotScope::~Ch2k8HotScope() {}
+Ch2k8HotScope::Ch2k8HotScope(unsigned,uint32_t,uint8_t*,bool,bool,bool,bool,const uint64_t* counts) : ram_counts_(counts) {}
+Ch2k8HotScope::~Ch2k8HotScope() {last_wide=ram_counts_?ram_counts_[0]:0;last_bytes=ram_counts_?ram_counts_[1]:0;}
 '''
     main = '''
 int main() {
@@ -159,6 +169,7 @@ int main() {
  if(!memory || !VirtualAlloc(memory,bytes,MEM_COMMIT,PAGE_READWRITE)) return 3;
  std::vector<uint8_t> initial(bytes), expected(bytes);
  PPCFunc* functions[]={sub_84723778,sub_84723CC0,sub_84724930};
+ unsigned guarded_checks=0;
  for(unsigned f=0;f<3;++f) for(unsigned trial=0;trial<28;++trial) {
   uint32_t seed=0x6E624EB7+trial;
   for(auto &byte:initial) { seed^=seed<<13;seed^=seed>>17;seed^=seed<<5;byte=trial<12 ? uint8_t(seed) : uint8_t(0x30|(seed&7)); }
@@ -180,8 +191,24 @@ int main() {
     printf("Mismatch function=%u trial=%u variant=%u\\n",f,trial,variant);return 2;
    }
   }
+  if(f==2 && trial>=12 && trial%4==0) {
+   for(unsigned slot : {356u,364u}) for(uint32_t value : {3u,40945u,40960u,65536u,0xFFFFFFFCu,0xFFFFFFFFu}) {
+    inject_stack_load=true;injected_address=0x180000-slot;injected_value=value;
+    a=initial_context;b=initial_context;
+    std::memcpy(memory,initial.data(),bytes);simde_mm_setcsr(0x1F80);selected=false;
+    functions[f](a,memory);std::memcpy(expected.data(),memory,bytes);
+    std::memcpy(memory,initial.data(),bytes);simde_mm_setcsr(0x1F80);
+    selected=selected_unpack=selected_store=selected_ram=true;
+    functions[f](b,memory);
+    if(std::memcmp(&a,&b,sizeof(a)) || std::memcmp(expected.data(),memory,bytes) || !last_wide || !last_bytes) {
+     printf("Guard mismatch trial=%u slot=%u value=%u wide=%llu bytes=%llu\\n",trial,slot,value,last_wide,last_bytes);return 4;
+    }
+    ++guarded_checks;inject_stack_load=false;
+   }
+  }
  }
  VirtualFree(memory,0,MEM_RELEASE);puts("336 complete function comparisons passed");
+ printf("%u guarded reload comparisons passed\\n",guarded_checks);
 }
 '''
     source = tmp_path/'whole_functions.cpp'
@@ -196,3 +223,4 @@ int main() {
     result = subprocess.run([str(executable)], capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stdout + result.stderr
     assert '336 complete function comparisons passed' in result.stdout
+    assert '48 guarded reload comparisons passed' in result.stdout

@@ -38,6 +38,14 @@ other routines and ineligible memory retain byte stores. Hot logs distinguish
 [native RAM finding](../docs/findings/2026-11-01-proven-native-ram-stores.md)
 for paired timing, memory safety checks, and whole-game measurement limits.
 
+The third hot routine now uses the native path when two reloaded output offsets
+pass range/alignment checks. A failure preserves the original byte stores for
+the rest of that invocation. `--no-ch2k8_guarded_vector_store` disables only this
+addition, keeping the preceding CPU/GPU optimizations enabled. See the
+[guarded-vector finding](../docs/findings/2026-11-01-guarded-vector-output.md)
+for the paired 17% routine gain, complete context/memory checks and graphics
+compatibility measurements. This CPU change applies to both graphics APIs.
+
 ## Launcher and Vulkan build
 
 The patched source SDK skips bit-identical shader-constant updates and bulk-decodes

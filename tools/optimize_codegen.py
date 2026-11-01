@@ -6,7 +6,7 @@ local. Unknown generator shapes fail rather than silently losing coverage.
 """
 import re
 from pathlib import Path
-from prove_vector_store_ranges import prove_store_span
+from prove_vector_store_ranges import prove_guarded_store_span
 
 TARGETS = ('84723778', '84723CC0', '84724930')
 OLD_MARKER = '// CH2K8 measured packed-vector variants'
@@ -130,13 +130,19 @@ def optimize_source(original_text):
         if store_count != body.count('\t// stvlx '):
             raise ValueError(f'{address}: unexpected store shape')
         rammed = stored
-        proof=prove_store_span(body)
+        proof=prove_guarded_store_span(body)
         if proof:
             rammed=re.sub(r'Ch2k8StoreVectorLeft\(base, ea, ctx\.(v\d+)\);',
                 r'if (native_span) native_ram.StorePrepared(base, ea, ctx.\1); else { Ch2k8StoreVectorLeft(base, ea, ctx.\1); ++native_ram.counts[1]; }',rammed)
             load='\tctx.r11.u64 = REX_LOAD_U32(ctx.r3.u32 + 116);'
             assert rammed.count(load)==1
             rammed=rammed.replace(load,load+f'\n\tnative_span = native_ram.PrepareSpan(base, ctx.r11.u32, {proof["span"]}, &ctx, sizeof(ctx));',1)
+            for guard in proof['guards']:
+                if rammed.count(guard['load'])!=1:
+                    raise ValueError(f'{address}: ambiguous guarded stack reload')
+                register=guard['register']
+                rammed=rammed.replace(guard['load'],guard['load']+
+                    f'\n\tnative_span = native_span && ctx.r{register}.u64 <= {guard["maximum"]}u && !(ctx.r{register}.u32 & 3u);',1)
         rammed = rammed.replace(signature,
             f'static void sub_{address}_ram_fast(PPCContext& __restrict ctx, uint8_t* base) {{\n'
             f'\tCh2k8RamStoreScope native_ram(true);\n'
