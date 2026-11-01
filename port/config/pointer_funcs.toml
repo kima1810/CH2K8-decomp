@@ -1,6 +1,6 @@
 # Code addresses referenced from data or built with lis/addi (vtables, callbacks)
 # that analysis did not register as functions. Add entries as codegen or runtime finds them.
-# 26 entries.
+# Individually verified additions; see dated findings.
 
 [functions]
 # First codegen (ReXGlue 0.10.0.24, 2026-10-22): "UnresolvedCall ... target not in any function".
@@ -77,3 +77,9 @@
 0x8471B0D8 = { size = 4 }  # -> 84718B10, then padding
 0x8471B0F8 = { size = 8 }  # mask r3 to byte -> 847187A8
 0x8471B100 = { size = 8 }  # mask r3 to byte -> 8471A1B0
+
+# [CONFIRMED] Optimized-only ROV test reaches 8471B0A8 after tip-off.
+# Original bodies are li r3,0 followed by a tail branch. Read-only audit of
+# all 21 wrappers in [8471B068,8471B118) finds only these two missing entries.
+0x8471B0A8 = { size = 8 }  # zero r3 -> 84718B80; runtime-observed
+0x8471B0B0 = { size = 8 }  # zero r3 -> 84718B90; verified sibling

@@ -69,6 +69,8 @@ def test_generated_gameplay_thunks_preserve_arguments_and_return_path(tmp_path):
     if sys.platform != "win32" or not compiler or not sdk.is_dir() or not generated.is_dir():
         pytest.skip("Requires Windows, local ReXGlue SDK, generated game code, and clang++")
     thunks = {
+        0x8471B0A8: (0x84718B80, 'zero'),
+        0x8471B0B0: (0x84718B90, 'zero'),
         0x8471B0B8: (0x84718B60, True),
         0x8471B0C0: (0x84718B70, True),
         0x8471B0C8: (0x84718B80, True),
@@ -94,14 +96,14 @@ def test_generated_gameplay_thunks_preserve_arguments_and_return_path(tmp_path):
             break
     assert set(bodies) == set(thunks), "Gameplay thunk absent from generated sources"
     mappings = (generated / "ch2k8_init.cpp").read_text(encoding="utf-8")
-    stubs, checks = [], []
+    stubs, checks = {}, []
     for address, (target, masks_byte) in thunks.items():
         assert f"{{ 0x{address:08X}, sub_{address:08X} }}" in mappings
-        stubs.append(
+        stubs[target] = (
             f'extern "C" void sub_{target:08X}(PPCContext& ctx, uint8_t*) {{ '
             f"observed = ctx.r3.u64; destination = 0x{target:08X}; ctx.r3.u64 = 0xCAFE; }}"
         )
-        expected = "0x88" if masks_byte else "0x1122334455667788ULL"
+        expected = "0" if masks_byte == 'zero' else "0x88" if masks_byte else "0x1122334455667788ULL"
         checks.append(
             "ctx.r3.u64 = 0x1122334455667788ULL; ctx.r4.u64 = 0xAABB; ctx.lr = 0x12345678;\n"
             f"sub_{address:08X}(ctx, memory);\n"
@@ -112,7 +114,7 @@ def test_generated_gameplay_thunks_preserve_arguments_and_return_path(tmp_path):
     executable = tmp_path / "gameplay_thunks.exe"
     source.write_text(
         '#include "ch2k8_pch.h"\nstatic uint64_t observed; static uint32_t destination;\n'
-        + "\n".join(stubs) + "\n" + "\n".join(bodies.values())
+        + "\n".join(stubs.values()) + "\n" + "\n".join(bodies.values())
         + "\nint main() { PPCContext ctx{}; alignas(32) uint8_t memory[32]{};\n"
         + "\n".join(checks) + "\n}\n", encoding="utf-8",
     )
