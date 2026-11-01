@@ -3,6 +3,17 @@
 This is an experimental native port. Successful code generation or compilation
 does not establish that menus or gameplay work.
 
+Measured integer SIMD packing is enabled for three observed hot guest routines.
+It preserves the corrected scalar path and can be disabled with
+`--ch2k8_vector_pack=baseline`. `compare` randomly interleaves both versions
+within a run; `--ch2k8_hot_log=PATH.csv` records opt-in function timing and work
+counts. Summarize a window with `tools/summarize_hot_functions.py`.
+The [hot-function finding](../docs/findings/2026-11-01-hot-functions-and-vector-pack.md)
+records correctness checks, measured 7–11% per-routine work-cost reductions and
+their limits. This is not a claim of the same improvement in displayed FPS.
+The address catalog is under `docs/symbols/`; unresolved engine purposes keep
+their `FUN_` names. Profiling and image captures remain off in normal play.
+
 ## Launcher and Vulkan build
 
 Open `Launch CH2K8.cmd` in the repository root for renderer, resolution,

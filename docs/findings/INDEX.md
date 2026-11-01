@@ -1,5 +1,8 @@
 # Findings index
 
+- [2026-11-01 Hot functions and vector packing](2026-11-01-hot-functions-and-vector-pack.md): catalog eight recurring functions and the presentation import; bit-equivalent integer SIMD packing reduces measured whole-function work costs about 7–11% in interleaved tests. Retain baseline/compare modes and opt-in per-thread timing; full-game speedup is not established.
+- [2026-11-01 Zero-argument callbacks](2026-11-01-gameplay-zero-argument-callbacks.md): optimized ROV run reaches tip-off, then exposes missing `8471B0A8`; original zero-r3 tail wrapper and sole missing sibling are registered after extending the bounded family audit to 21 entries.
+
 - [2026-11-01 Vulkan and launcher](2026-11-01-vulkan-and-launcher.md): isolated pinned SDK enables both native APIs; explicit backend selection and a Windows launcher expose resolution, refresh and window mode. Fix Windows dependency symlink placeholders and exclusive-mode refresh forwarding; runtime validation is recorded in the finding.
 
 - [2026-10-31 Remote renderer profiling](2026-10-31-remote-renderer-profiling.md): autonomous device captures, guest submission probes and read-only AMD telemetry establish roughly 78 ms submission intervals, normal GPU clocks, and roughly 19 ms summed action time per repeated scene batch. CPU/synchronization leads remain; AVX2 and RTV draw-extent experiments show no verified speedup.
