@@ -2,13 +2,14 @@ import json
 import shutil
 import subprocess
 import sys
+import struct
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT/'tools'))
-from summarize_gpu_run import summarize_run
+from summarize_gpu_run import summarize_run, inspect_native_readback
 
 
 @pytest.mark.parametrize('profile,backend,target,batching', [
@@ -72,3 +73,28 @@ def test_gpu_summary_keeps_unsupported_sensors_and_timing_limits(tmp_path):
     assert result['placeholder_presentation_skip_entries'] == 1
     assert not result['matched_scene']
     assert 'not unique displayed FPS' in result['limits']
+
+
+def test_gpu_constant_bins_use_log_timestamps_and_weight_packet_work(tmp_path):
+    (tmp_path/'run.json').write_text(json.dumps({'started':'2026-11-01T10:00:00-05:00'}))
+    (tmp_path/'runtime.log').write_text(
+        '[2026-11-01 10:00:01.000] CH2K8_GPU_CONSTANTS native=true single=999 ranges=0 words=999 skipped=999 skipped_words=999 float_uploads=999 system_uploads=999 bool_uploads=0\n'
+        '[2026-11-01 10:02:10.000] CH2K8_GPU_CONSTANTS native=true single=10 ranges=2 words=100 skipped=6 skipped_words=50 float_uploads=4 system_uploads=2 bool_uploads=1 fast_words=40 slow_words=60 fast_ns=80 slow_ns=360 fast_packets=2 slow_packets=3\n')
+    totals = summarize_run(tmp_path)['shader_constant_bins']['true']
+    assert totals['bins'] == 1 and totals['skipped_request_fraction'] == 0.5
+    assert totals['fast_ns_per_word'] == 2 and totals['slow_ns_per_word'] == 6
+    assert totals['float_uploads'] == 4
+
+
+def test_black_frame_detection_ignores_alpha_and_rejects_truncated_data(tmp_path):
+    header = bytearray(54)
+    header[:2] = b'BM'
+    struct.pack_into('<I', header, 10, 54)
+    struct.pack_into('<IiiHHI', header, 14, 40, 2, -1, 1, 32, 0)
+    path = tmp_path/'output.bmp'
+    path.write_bytes(header+bytes([0,0,0,255,0,0,0,255]))
+    assert inspect_native_readback(path)['all_black']
+    path.write_bytes(header+bytes([0,0,0,255,0,0,1,0]))
+    assert inspect_native_readback(path)['non_black_pixel_fraction'] == 0.5
+    path.write_bytes(header+b'\x00')
+    assert 'Truncated' in inspect_native_readback(path)['error']

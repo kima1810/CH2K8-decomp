@@ -5,6 +5,7 @@ CH2K8 launcher: choose renderer, resolution, refresh rate and window mode.
 [CmdletBinding()]
 param(
     [ValidateSet('d3d12', 'vulkan')][string]$Renderer = 'd3d12',
+    [ValidateSet('auto', 'native', 'accurate')][string]$RenderPath = 'auto',
     [ValidateSet('1280x720', '1600x900', '1920x1080', '2560x1440', '3840x2160')]
     [string]$Resolution = '1280x720',
     [ValidateRange(24, 240)][int]$RefreshRate = 60,
@@ -21,8 +22,9 @@ $settingsPath = Join-Path $repoRoot 'port/userdata/launcher.json'
 if (-not $GameData) { $GameData = Join-Path $repoRoot 'work/ch2k8/XBOX/disc' }
 
 function Get-LaunchConfiguration {
-    param([string]$Backend, [string]$Size, [int]$Hertz, [string]$Mode, [string]$Data, [string]$Program)
+    param([string]$Backend, [string]$Size, [int]$Hertz, [string]$Mode, [string]$Data, [string]$Program, [string]$Path = 'auto')
     if ($Backend -notin @('d3d12', 'vulkan')) { throw 'Choose a supported renderer.' }
+    if ($Path -notin @('auto', 'native', 'accurate')) { throw 'Choose a supported rendering mode.' }
     if ($Size -notmatch '^(1280x720|1600x900|1920x1080|2560x1440|3840x2160)$') {
         throw 'Choose a supported resolution.'
     }
@@ -48,7 +50,13 @@ function Get-LaunchConfiguration {
     if ($Mode -eq 'windowed') { $arguments += @('--no-fullscreen', '--no-fullscreen_exclusive') }
     elseif ($Mode -eq 'exclusive') { $arguments += @('--fullscreen', '--fullscreen_exclusive') }
     else { $arguments += @('--fullscreen', '--no-fullscreen_exclusive') }
-    if ($Backend -eq 'd3d12') { $arguments += '--render_target_path_d3d12=rov' }
+    if ($Backend -eq 'd3d12') {
+        $target = if ($Path -eq 'native') { 'rtv' } else { 'rov' }
+        $arguments += "--render_target_path_d3d12=$target"
+    } else {
+        $target = if ($Path -eq 'native') { 'fbo' } else { 'fsi' }
+        $arguments += "--render_target_path_vulkan=$target"
+    }
     # Start-Process joins arguments into a command line. Paths may contain spaces;
     # quote each complete argument and reject embedded native quote characters.
     foreach ($argument in $arguments) {
@@ -65,7 +73,7 @@ function Start-Ch2k8 {
 }
 
 if ($Launch -or $ValidateOnly) {
-    $configuration = Get-LaunchConfiguration $Renderer $Resolution $RefreshRate $WindowMode $GameData $Executable
+    $configuration = Get-LaunchConfiguration $Renderer $Resolution $RefreshRate $WindowMode $GameData $Executable $RenderPath
     if ($ValidateOnly) { $configuration | ConvertTo-Json -Depth 3 }
     else { Start-Ch2k8 $configuration | Select-Object Id }
     return
@@ -78,6 +86,7 @@ try {
     if (Test-Path -LiteralPath $settingsPath) {
         $saved = Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json
         if (-not $PSBoundParameters.ContainsKey('Renderer') -and $saved.renderer -in @('d3d12', 'vulkan')) { $Renderer = $saved.renderer }
+        if (-not $PSBoundParameters.ContainsKey('RenderPath') -and $saved.render_path -in @('auto', 'native', 'accurate')) { $RenderPath = $saved.render_path }
         if (-not $PSBoundParameters.ContainsKey('Resolution') -and $saved.resolution -match '^(1280x720|1600x900|1920x1080|2560x1440|3840x2160)$') { $Resolution = $saved.resolution }
         if (-not $PSBoundParameters.ContainsKey('RefreshRate') -and $saved.refresh_rate -ge 24 -and $saved.refresh_rate -le 240) { $RefreshRate = [int]$saved.refresh_rate }
         if (-not $PSBoundParameters.ContainsKey('WindowMode') -and $saved.window_mode -in @('windowed', 'borderless', 'exclusive')) { $WindowMode = $saved.window_mode }
@@ -87,7 +96,7 @@ try {
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'College Hoops 2K8'
-$form.ClientSize = New-Object System.Drawing.Size(620, 440)
+$form.ClientSize = New-Object System.Drawing.Size(620, 514)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedDialog'
 $form.MaximizeBox = $false
@@ -117,7 +126,7 @@ $title = Add-Label 'COLLEGE HOOPS 2K8' 24 20 560
 $title.Font = New-Object System.Drawing.Font('Segoe UI', 19, [System.Drawing.FontStyle]::Bold)
 $title.Height = 40
 $null = Add-Label 'Renderer' 24 80
-$backend = Add-Choice @('Direct3D 12 (ROV)', 'Vulkan (experimental)') 24 106
+$backend = Add-Choice @('Direct3D 12', 'Vulkan (experimental)') 24 106
 $backend.SelectedIndex = if ($Renderer -eq 'vulkan') { 1 } else { 0 }
 $null = Add-Label 'Window mode' 326 80
 $mode = Add-Choice @('Windowed', 'Borderless fullscreen', 'Exclusive fullscreen') 326 106
@@ -131,18 +140,21 @@ $rate.Minimum = 24; $rate.Maximum = 240; $rate.Value = $RefreshRate
 $rate.Location = New-Object System.Drawing.Point(326, 181)
 $rate.Size = New-Object System.Drawing.Size(260, 30)
 $form.Controls.Add($rate)
-$hint = Add-Label '60 Hz matches original timing. Borderless uses the desktop display mode.' 24 222 570
+$null = Add-Label 'Rendering mode' 24 229 560
+$renderMode = Add-Choice @('Automatic', 'Native render targets', 'Accurate Xbox blending') 24 255 562
+$renderMode.SelectedIndex = @('auto', 'native', 'accurate').IndexOf($RenderPath)
+$hint = Add-Label 'Native targets are experimental and may flash black. Automatic uses accurate blending. 60 Hz retains original timing.' 24 296 570
 $hint.ForeColor = [System.Drawing.Color]::Silver
 $hint.Height = 40
-$null = Add-Label 'Extracted game folder' 24 270 560
+$null = Add-Label 'Extracted game folder' 24 344 560
 $dataBox = New-Object System.Windows.Forms.TextBox
 $dataBox.Text = $GameData
-$dataBox.Location = New-Object System.Drawing.Point(24, 296)
+$dataBox.Location = New-Object System.Drawing.Point(24, 370)
 $dataBox.Size = New-Object System.Drawing.Size(466, 30)
 $form.Controls.Add($dataBox)
 $browse = New-Object System.Windows.Forms.Button
 $browse.Text = 'Browse...'
-$browse.Location = New-Object System.Drawing.Point(500, 294)
+$browse.Location = New-Object System.Drawing.Point(500, 368)
 $browse.Size = New-Object System.Drawing.Size(86, 32)
 $form.Controls.Add($browse)
 $browse.Add_Click({
@@ -154,7 +166,7 @@ $browse.Add_Click({
 })
 $play = New-Object System.Windows.Forms.Button
 $play.Text = 'Launch game'
-$play.Location = New-Object System.Drawing.Point(392, 364)
+$play.Location = New-Object System.Drawing.Point(392, 438)
 $play.Size = New-Object System.Drawing.Size(194, 46)
 $play.FlatStyle = 'Flat'
 $play.BackColor = [System.Drawing.Color]::FromArgb(164, 43, 49)
@@ -164,10 +176,11 @@ $play.Add_Click({
     try {
         $selectedBackend = @('d3d12', 'vulkan')[$backend.SelectedIndex]
         $selectedMode = @('windowed', 'borderless', 'exclusive')[$mode.SelectedIndex]
-        $configuration = Get-LaunchConfiguration $selectedBackend ([string]$size.SelectedItem) ([int]$rate.Value) $selectedMode $dataBox.Text $Executable
+        $selectedPath = @('auto', 'native', 'accurate')[$renderMode.SelectedIndex]
+        $configuration = Get-LaunchConfiguration $selectedBackend ([string]$size.SelectedItem) ([int]$rate.Value) $selectedMode $dataBox.Text $Executable $selectedPath
         $null = Start-Ch2k8 $configuration
         $null = New-Item -ItemType Directory -Path (Split-Path -Parent $settingsPath) -Force
-        @{ renderer = $selectedBackend; resolution = [string]$size.SelectedItem;
+        @{ renderer = $selectedBackend; render_path = $selectedPath; resolution = [string]$size.SelectedItem;
            refresh_rate = [int]$rate.Value; window_mode = $selectedMode;
            game_data = $dataBox.Text } | ConvertTo-Json | Set-Content -LiteralPath $settingsPath -Encoding utf8
         $form.Close()

@@ -11,8 +11,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @pytest.mark.parametrize('backend,mode,flags', [
     ('d3d12', 'windowed', ['--no-fullscreen', '--render_target_path_d3d12=rov']),
-    ('vulkan', 'exclusive', ['--fullscreen', '--fullscreen_exclusive']),
-    ('vulkan', 'borderless', ['--fullscreen', '--no-fullscreen_exclusive']),
+    ('vulkan', 'exclusive', ['--fullscreen', '--fullscreen_exclusive', '--render_target_path_vulkan=fsi']),
+    ('vulkan', 'borderless', ['--fullscreen', '--no-fullscreen_exclusive', '--render_target_path_vulkan=fsi']),
 ])
 def test_launcher_builds_explicit_backend_and_display_args(tmp_path, backend, mode, flags):
     shell = shutil.which('powershell.exe')
@@ -43,3 +43,26 @@ def test_launcher_builds_explicit_backend_and_display_args(tmp_path, backend, mo
     failure = subprocess.run(command, capture_output=True, text=True)
     assert failure.returncode != 0
     assert 'default.xex' in failure.stderr
+
+
+@pytest.mark.parametrize('backend,path,target', [
+    ('d3d12', 'native', '--render_target_path_d3d12=rtv'),
+    ('d3d12', 'accurate', '--render_target_path_d3d12=rov'),
+    ('vulkan', 'native', '--render_target_path_vulkan=fbo'),
+    ('vulkan', 'accurate', '--render_target_path_vulkan=fsi'),
+])
+def test_launcher_selects_native_or_accurate_targets(tmp_path, backend, path, target):
+    shell = shutil.which('powershell.exe')
+    if not shell:
+        pytest.skip('Requires Windows PowerShell')
+    data = tmp_path/'disc'
+    data.mkdir()
+    (data/'default.xex').write_bytes(b'')
+    program = tmp_path/'game.exe'
+    program.write_bytes(b'')
+    result = subprocess.run([shell, '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+        str(ROOT/'tools/launch_ch2k8.ps1'), '-ValidateOnly', '-Renderer', backend,
+        '-RenderPath', path, '-Executable', str(program), '-GameData', str(data)],
+        capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert target in json.loads(result.stdout)['arguments']

@@ -11,6 +11,10 @@ param(
     [string]$Executable,
     [string]$GameData,
     [string]$UserData,
+    [ValidateSet('default', 'baseline', 'optimized')][string]$NativeConstants = 'default',
+    [ValidateSet('default', 'baseline', 'optimized')][string]$NativePackets = 'default',
+    [switch]$GpuStats,
+    [switch]$PacketCompare,
     [switch]$ValidateOnly
 )
 $ErrorActionPreference = 'Stop'
@@ -43,6 +47,12 @@ else { $arguments += '--render_target_path_vulkan=fbo' }
 # explicit waits, coherence/readback controls, and ordering barriers enabled.
 if ($Profile.EndsWith('-batched')) { $arguments += "--no-${backend}_submit_on_primary_buffer_end" }
 if ($Profile.EndsWith('-extent')) { $arguments += '--execute_unclipped_draw_vs_on_cpu' }
+if ($NativeConstants -eq 'baseline') { $arguments += '--no-ch2k8_native_constants' }
+elseif ($NativeConstants -eq 'optimized') { $arguments += '--ch2k8_native_constants' }
+if ($GpuStats) { $arguments += '--ch2k8_gpu_stats' }
+if ($PacketCompare) { $arguments += '--ch2k8_packet_compare' }
+if ($NativePackets -eq 'baseline') { $arguments += '--no-ch2k8_native_packets' }
+elseif ($NativePackets -eq 'optimized') { $arguments += '--ch2k8_native_packets' }
 foreach ($argument in $arguments) {
     if ($argument.Contains('"')) { throw 'Paths must not contain double quotes.' }
 }
