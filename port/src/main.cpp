@@ -167,6 +167,9 @@ protected:
     for (const auto *name :
          {"render_target_path_d3d12", "render_target_path_vulkan",
           "async_shader_compilation", "readback_resolve", "readback_memexport",
+          "readback_memexport_fast", "d3d12_bindless",
+          "d3d12_submit_on_primary_buffer_end",
+          "vulkan_submit_on_primary_buffer_end", "vulkan_dynamic_rendering",
           "occlusion_query_enable", "host_present_from_non_ui_thread",
           "draw_resolution_scale_x", "draw_resolution_scale_y", "dxbc_switch",
           "d3d12_pipeline_creation_threads",

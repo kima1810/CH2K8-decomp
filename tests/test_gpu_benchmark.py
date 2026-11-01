@@ -1,0 +1,74 @@
+import json
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT/'tools'))
+from summarize_gpu_run import summarize_run
+
+
+@pytest.mark.parametrize('profile,backend,target,batching', [
+    ('d3d12-rov', 'd3d12', '--render_target_path_d3d12=rov', False),
+    ('d3d12-rov-batched', 'd3d12', '--render_target_path_d3d12=rov', True),
+    ('d3d12-rtv', 'd3d12', '--render_target_path_d3d12=rtv', False),
+    ('d3d12-rtv-extent', 'd3d12', '--render_target_path_d3d12=rtv', False),
+    ('vulkan-fbo', 'vulkan', '--render_target_path_vulkan=fbo', False),
+    ('vulkan-fsi', 'vulkan', '--render_target_path_vulkan=fsi', False),
+    ('vulkan-fbo-batched', 'vulkan', '--render_target_path_vulkan=fbo', True),
+    ('vulkan-fsi-batched', 'vulkan', '--render_target_path_vulkan=fsi', True),
+])
+def test_gpu_profiles_launch_the_requested_path_without_changing_coherence(tmp_path, profile, backend, target, batching):
+    shell = shutil.which('powershell.exe')
+    if not shell:
+        pytest.skip('Requires Windows PowerShell')
+    data = tmp_path/'disc with spaces'
+    data.mkdir()
+    (data/'default.xex').write_bytes(b'')
+    executable = tmp_path/'unused executable.exe'
+    executable.write_bytes(b'')
+    command = [shell, '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+               str(ROOT/'tools/benchmark_gpu_path.ps1'), '-ValidateOnly', '-Profile', profile,
+               '-GameData', str(data), '-Executable', str(executable)]
+    result = subprocess.run(command, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    config = json.loads(result.stdout)
+    args = config['arguments']
+    assert f'--ch2k8_renderer={backend}' in args and target in args
+    assert f'--game_data_root={data}' in args
+    assert (f'--no-{backend}_submit_on_primary_buffer_end' in args) == batching
+    assert ('--execute_unclipped_draw_vs_on_cpu' in args) == profile.endswith('-extent')
+    assert not any('readback' in arg or 'occlusion' in arg for arg in args)
+    assert '--ch2k8_output_capture_count=2' in args
+    assert config['capture_seconds'] == 210 and not config['matched_scene']
+    assert not Path(config['run_root']).exists()
+    (data/'default.xex').unlink()
+    failure = subprocess.run(command, capture_output=True, text=True)
+    assert failure.returncode != 0 and 'default.xex' in failure.stderr
+
+
+def test_gpu_summary_keeps_unsupported_sensors_and_timing_limits(tmp_path):
+    (tmp_path/'run.json').write_text(json.dumps({'profile': 'vulkan-fbo', 'executable_sha256': 'abc'}))
+    (tmp_path/'guest-frames.csv').write_text(
+        'elapsed_ms,submit_interval_ms,swap_wall_ms,swap_thread_cpu_ms\n'
+        '1000,16,1,0\n120000,50,0.002,0\n121000,60,0.003,0\n')
+    (tmp_path/'process.csv').write_text(
+        'elapsed_s,cpu_time_s,working_set_bytes,threads\n'
+        '120,200,1024,10\n130,230,2048,11\n')
+    (tmp_path/'amd.csv').write_text('second,gfx_clock_raw,gfx_activity_raw,throttler_raw\n'
+                                 '10,200,20,0\n120,2600,80,NA\n130,2700,90,NA\n')
+    (tmp_path/'runtime.log').write_text('Creating graphics pipeline state\n'
+                                      'Skipping Vulkan frame presentation\n')
+    result = summarize_run(tmp_path)
+    assert result['guest_submissions']['submissions'] == 2
+    assert result['mean_process_cpu_cores'] == 3
+    assert result['peak_sampled_working_set_bytes'] == 2048
+    assert result['amd_raw_sensor_medians']['gfx_clock_raw'] == 2650
+    assert result['amd_raw_sensor_medians']['throttler_raw'] is None
+    assert result['pipeline_creation_log_entries'] == 1
+    assert result['placeholder_presentation_skip_entries'] == 1
+    assert not result['matched_scene']
+    assert 'not unique displayed FPS' in result['limits']
