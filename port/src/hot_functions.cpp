@@ -1,0 +1,128 @@
+#include "packed_vector_optimized.h"
+#include <atomic>
+#include <chrono>
+#include <cstdio>
+#include <mutex>
+#include <thread>
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
+namespace {
+std::atomic<int> mode{0}; // baseline, optimized, interleaved comparison
+std::atomic<bool> profiling{false};
+std::mutex output_mutex;
+std::FILE *output = nullptr;
+uint64_t origin = 0;
+constexpr uint32_t addresses[] = {0x84723778, 0x84723CC0, 0x84724930};
+struct Bin {
+  uint64_t calls = 0, units = 0, nanoseconds = 0;
+};
+thread_local Bin bins[3][2];
+thread_local uint32_t selection[3]{0x91E10DA5, 0x7F4A7C15, 0x6E624EB7};
+thread_local uint64_t previous_flush = 0;
+uint64_t now_ns() {
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(
+             std::chrono::steady_clock::now().time_since_epoch())
+      .count();
+}
+void flush(uint64_t now) {
+  std::lock_guard lock(output_mutex);
+  if (!output)
+    return;
+#ifdef _WIN32
+  const auto thread = uint64_t(GetCurrentThreadId());
+#else
+  const auto thread =
+      uint64_t(std::hash<std::thread::id>{}(std::this_thread::get_id()));
+#endif
+  for (unsigned id = 0; id < 3; ++id)
+    for (unsigned fast = 0; fast < 2; ++fast) {
+      auto &bin = bins[id][fast];
+      if (!bin.calls)
+        continue;
+      std::fprintf(output, "%.3f,%llu,0x%08X,%u,%llu,%llu,%llu\n",
+                   double(now - origin) / 1000000.0, (unsigned long long)thread,
+                   addresses[id], fast, (unsigned long long)bin.calls,
+                   (unsigned long long)bin.units,
+                   (unsigned long long)bin.nanoseconds);
+      bin = {};
+    }
+  std::fflush(output);
+  previous_flush = now;
+}
+} // namespace
+
+void Ch2k8ConfigureHotFunctions(int selected_mode, const char *path) {
+  mode.store(selected_mode, std::memory_order_release);
+  if (!path || !*path)
+    return;
+  std::lock_guard lock(output_mutex);
+#ifdef _WIN32
+  fopen_s(&output, path, "w");
+#else
+  output = std::fopen(path, "w");
+#endif
+  if (!output)
+    return;
+  std::fputs("elapsed_ms,thread,function,optimized,calls,work_units,wall_ns\n",
+             output);
+  origin = now_ns();
+  profiling.store(true, std::memory_order_release);
+}
+void Ch2k8CloseHotLog() {
+  profiling.store(false, std::memory_order_release);
+  std::lock_guard lock(output_mutex);
+  if (output) {
+    std::fclose(output);
+    output = nullptr;
+  }
+}
+bool Ch2k8SelectFastVectorPack(unsigned index) {
+  const auto selected = mode.load(std::memory_order_acquire);
+  if (selected != 2)
+    return selected == 1;
+  // Randomize within the same run so fixed call-order parity cannot assign
+  // every expensive descriptor to the same implementation on every frame.
+  auto &state = selection[index];
+  state ^= state << 13;
+  state ^= state >> 17;
+  state ^= state << 5;
+  return bool(state & 1);
+}
+Ch2k8HotScope::Ch2k8HotScope(unsigned index, uint32_t descriptor, uint8_t *base,
+                             bool fast)
+    : index_(index), fast_(fast) {
+  if (!profiling.load(std::memory_order_acquire))
+    return;
+  // [CONFIRMED] Descriptor fields used by the original loop-count instructions.
+  // First two derive group counts from descriptor+4; third counts outer groups.
+  auto pointer = base + descriptor + (descriptor >= 0xE0000000u ? 0x1000u : 0u);
+  if (index == 0) {
+    units_ = __builtin_bswap16(
+                 *reinterpret_cast<volatile uint16_t *>(pointer + 4)) >>
+             3;
+  } else if (index == 1) {
+    units_ = (__builtin_bswap32(
+                  *reinterpret_cast<volatile uint32_t *>(pointer + 4)) >>
+              3) &
+             0x1FFF;
+  } else {
+    units_ =
+        (__builtin_bswap32(*reinterpret_cast<volatile uint32_t *>(pointer)) >>
+         1) &
+        0x1F;
+  }
+  started_ = now_ns();
+}
+Ch2k8HotScope::~Ch2k8HotScope() {
+  if (!started_)
+    return;
+  const auto now = now_ns();
+  auto &bin = bins[index_][fast_];
+  ++bin.calls;
+  bin.units += units_;
+  bin.nanoseconds += now - started_;
+  if (now - previous_flush >= 1000000000)
+    flush(now);
+}

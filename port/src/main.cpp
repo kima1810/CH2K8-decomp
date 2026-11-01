@@ -24,6 +24,13 @@ REXCVAR_DEFINE_STRING(ch2k8_renderer, "d3d12", "CH2K8/Graphics",
 
 bool Ch2k8OpenFrameLog(const char *path);
 void Ch2k8CloseFrameLog();
+void Ch2k8ConfigureHotFunctions(int selected_mode, const char *path);
+void Ch2k8CloseHotLog();
+REXCVAR_DEFINE_STRING(ch2k8_vector_pack, "optimized", "CH2K8/Performance",
+                      "Packed-vector path: baseline, optimized, or compare")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+REXCVAR_DEFINE_STRING(ch2k8_hot_log, "", "CH2K8/Diagnostics",
+                      "Opt-in per-thread hot-function aggregate CSV");
 bool Ch2k8SaveOutput(rex::ui::Presenter *presenter, const char *path);
 REXCVAR_DEFINE_STRING(ch2k8_output_capture, "", "CH2K8/Diagnostics",
                       "Opt-in native guest-output BMP filename prefix");
@@ -89,6 +96,16 @@ protected:
   }
 
   void OnPostSetup() override {
+    const auto pack = REXCVAR_GET(ch2k8_vector_pack);
+    if (pack != "baseline" && pack != "optimized" && pack != "compare") {
+      REXLOG_ERROR("Invalid ch2k8_vector_pack: {}", pack);
+      std::exit(EXIT_FAILURE);
+    }
+    Ch2k8ConfigureHotFunctions(pack == "compare"     ? 2
+                               : pack == "optimized" ? 1
+                                                     : 0,
+                               REXCVAR_GET(ch2k8_hot_log).c_str());
+    REXLOG_INFO("CH2K8 packed-vector path: {}", pack);
     const auto output_prefix = REXCVAR_GET(ch2k8_output_capture);
     auto graphics = runtime()->graphics_system();
     if (!output_prefix.empty() && graphics && graphics->presenter()) {
@@ -191,6 +208,7 @@ protected:
   }
 
   void OnShutdown() override {
+    Ch2k8CloseHotLog();
     Ch2k8CloseFrameLog();
     output_thread_.request_stop();
     if (output_thread_.joinable())

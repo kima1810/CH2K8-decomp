@@ -56,8 +56,12 @@ def test_local_generated_packed64_sites_match_correction():
         pytest.skip('Requires locally generated game code')
     count = 0
     packs = 0
+    duplicated_unpacks = 0
     for path in generated.glob('*_recomp.*.cpp'):
         source = path.read_text()
+        for duplicate in re.finditer(r'static void sub_[0-9A-F]{8}_fast\([^\n]+\) \{', source):
+            end = source.index('\n}\n', duplicate.start())
+            duplicated_unpacks += len(re.findall(r'\t// vupkd3d128 (v\d+),(v\d+),24\n', source[duplicate.start():end]))
         for match in re.finditer(r'\t// vupkd3d128 (v\d+),(v\d+),24\n', source):
             expected, _ = correct_packed64_unpack(emitted_block(*match.groups()))
             assert source[match.start():].startswith(expected), path
@@ -67,7 +71,7 @@ def test_local_generated_packed64_sites_match_correction():
             expected, _ = correct_packed64_pack(emitted_pack(dst, src, int(shift)))
             assert source[match.start():].startswith(expected), path
             packs += 1
-    assert count == 163
+    assert count == 163 + duplicated_unpacks
     assert packs == 89
 
 

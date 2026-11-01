@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 
 from fix_codegen import correct_directory
+from optimize_codegen import optimize_directory
 
 
 def run_codegen(executable: Path, manifest: Path, generated: Path | None = None) -> int:
@@ -22,6 +23,8 @@ def run_codegen(executable: Path, manifest: Path, generated: Path | None = None)
         if generated:
             total, changed = correct_directory(generated)
             print(f"vupkd3d128: corrected {total} expressions in {changed} files", flush=True)
+            optimized = optimize_directory(generated)
+            print(f"hot functions: prepared {optimized} paired pack sites", flush=True)
             # The SDK can rewrite a corrected file back to the broken form.
             # If correction restores identical bytes, avoid a pointless rebuild.
             for path, (digest, stat) in previous.items():
