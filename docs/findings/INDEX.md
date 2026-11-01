@@ -1,5 +1,7 @@
 # Findings index
 
+- [2026-11-01 Vulkan and launcher](2026-11-01-vulkan-and-launcher.md): isolated pinned SDK enables both native APIs; explicit backend selection and a Windows launcher expose resolution, refresh and window mode. Fix Windows dependency symlink placeholders and exclusive-mode refresh forwarding; runtime validation is recorded in the finding.
+
 - [2026-10-31 Remote renderer profiling](2026-10-31-remote-renderer-profiling.md): autonomous device captures, guest submission probes and read-only AMD telemetry establish roughly 78 ms submission intervals, normal GPU clocks, and roughly 19 ms summed action time per repeated scene batch. CPU/synchronization leads remain; AVX2 and RTV draw-extent experiments show no verified speedup.
 
 - [2026-10-31 Performance investigation](2026-10-31-performance-investigation.md): completed 319-second user trace identifies 30.95 seconds of startup pipeline creation and later GPU-busy presentation records around 200–250 ms. These are not individual gameplay-frame times; see the subsequent remote profiling finding for refined attribution.

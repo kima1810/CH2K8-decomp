@@ -3,6 +3,54 @@
 This is an experimental native port. Successful code generation or compilation
 does not establish that menus or gameplay work.
 
+## Launcher and Vulkan build
+
+Open `Launch CH2K8.cmd` in the repository root for renderer, resolution,
+refresh rate, window mode and extracted game-folder controls. D3D12 uses the
+working ROV path. Vulkan is an experimental native backend through the pinned
+Xenos-to-SPIR-V runtime. Choices are saved after launching in
+`port/userdata/launcher.json`.
+
+Build the separate dual-backend SDK and game from a shell with Git, Python,
+CMake, Ninja, Clang and the Microsoft build tools available:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/build_vulkan_sdk.ps1
+```
+
+The script downloads the exact existing SDK revision and its pinned dependencies,
+enables Vulkan and D3D12, and builds `port/out/build/win-amd64-vulkan/ch2k8.exe`.
+It preserves `port/sdk` and the original game build. Subsequent game-only builds:
+
+```powershell
+cd port
+cmake --preset win-amd64-vulkan
+cmake --build --preset win-amd64-vulkan --parallel 3
+```
+
+The launcher prefers this dual-backend executable for either renderer once
+built. `--ch2k8_renderer=vulkan` selects Vulkan explicitly; unavailable backends
+fail clearly. For a remote launch without UI:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/launch_ch2k8.ps1 -Launch -Renderer vulkan -Resolution 1280x720 -RefreshRate 60 -WindowMode windowed
+```
+
+Resolution sets the guest video mode and startup window, rather than every
+internal render target. Refresh rate controls guest timing (60 Hz is the original
+setting); exclusive fullscreen also requests the closest supported monitor mode.
+Borderless uses the desktop mode. The SDK preparation fixes exclusive refresh
+forwarding and materializes Windows Git symlink placeholders in libmspack.
+See the [Vulkan finding](../docs/findings/2026-11-01-vulkan-and-launcher.md) for
+runtime evidence, remaining limitations and reproducibility details.
+Timed native framebuffer captures need no debugger or keyboard input:
+`--ch2k8_output_capture=PATH_PREFIX --ch2k8_output_capture_delay=60`
+writes a BMP through the active presenter's GPU readback API. Optional
+`--ch2k8_output_capture_count=3 --ch2k8_output_capture_interval=60` records
+multiple phases; these captures briefly synchronize GPU work and stay off
+unless explicitly requested. RenderDoc's Vulkan layer is currently incompatible
+with this local capture configuration, so built-in readback is the tested path.
+
 ## Prerequisites
 
 - A local USA Xbox 360 disc image. The researched `default.xex` SHA-256 is
