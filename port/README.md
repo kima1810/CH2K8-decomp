@@ -14,6 +14,13 @@ their limits. This is not a claim of the same improvement in displayed FPS.
 The address catalog is under `docs/symbols/`; unresolved engine purposes keep
 their `FUN_` names. Profiling and image captures remain off in normal play.
 
+SIMD unpacking is also enabled within the optimized path. Use
+`--ch2k8_vector_unpack=baseline` to compare against the preceding pack-only build,
+or `--ch2k8_vector_unpack=compare --ch2k8_hot_log=PATH.csv` for interleaved timing.
+The older `--ch2k8_vector_pack=baseline` fallback still selects the fully retained
+original bodies. The [remaining-hotspots finding](../docs/findings/2026-11-01-remaining-hotspots-and-unpack.md)
+records the additional measured 3–9% routine reductions and remaining store costs.
+
 ## Launcher and Vulkan build
 
 Open `Launch CH2K8.cmd` in the repository root for renderer, resolution,

@@ -1,7 +1,7 @@
 platform,address,name,confidence,evidence
-xbox360,0x84723778,FUN_84723778,CONFIRMED,15/30 prior worker IP samples; read-only Ghidra entry/return verification; descriptor-counted runtime timings
-xbox360,0x84723CC0,FUN_84723CC0,CONFIRMED,6/30 prior worker IP samples; read-only Ghidra entry/return verification; descriptor-counted runtime timings
-xbox360,0x84724930,FUN_84724930,CONFIRMED,5/30 prior worker IP samples; read-only Ghidra entry/return verification; descriptor-counted runtime timings
+xbox360,0x84723778,FUN_84723778,CONFIRMED,135/299 fresh guest executable IP samples after pack optimization; Ghidra boundaries and descriptor-counted runtime timings verified
+xbox360,0x84723CC0,FUN_84723CC0,CONFIRMED,53/299 fresh guest executable IP samples after pack optimization; Ghidra boundaries and descriptor-counted runtime timings verified
+xbox360,0x84724930,FUN_84724930,CONFIRMED,107/299 fresh guest executable IP samples after pack optimization; Ghidra boundaries and descriptor-counted runtime timings verified
 xbox360,0x84725580,FUN_84725580,CONFIRMED,Generated direct calls to all three observed hot routines; purpose not yet named
 xbox360,0x847262B8,FUN_847262B8,CONFIRMED,Generated direct calls to all three observed hot routines; purpose not yet named
 xbox360,0x84726920,FUN_84726920,CONFIRMED,Generated direct calls to 0x84725580 and 0x847262B8; purpose not yet named
