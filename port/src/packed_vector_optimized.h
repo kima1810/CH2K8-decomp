@@ -58,10 +58,11 @@ inline void Ch2k8UnpackBiased64(PPCVRegister &destination,
 // Selected once per guest function call, never per vector instruction.
 bool Ch2k8SelectFastVectorPack(unsigned index);
 bool Ch2k8SelectFastVectorUnpack(unsigned index);
+bool Ch2k8SelectFastVectorStore(unsigned index);
 class Ch2k8HotScope {
 public:
   Ch2k8HotScope(unsigned index, uint32_t descriptor, uint8_t *base, bool fast,
-                bool unpack = false);
+                bool unpack = false, bool store = false);
   ~Ch2k8HotScope();
 
 private:
@@ -70,4 +71,5 @@ private:
   unsigned index_ = 0;
   bool fast_ = false;
   bool unpack_ = false;
+  bool store_ = false;
 };

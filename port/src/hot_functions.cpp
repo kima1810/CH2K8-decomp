@@ -11,6 +11,7 @@
 namespace {
 std::atomic<int> mode{0}; // baseline, optimized, interleaved comparison
 std::atomic<int> unpack_mode{0};
+std::atomic<int> store_mode{0};
 std::atomic<bool> profiling{false};
 std::mutex output_mutex;
 std::FILE *output = nullptr;
@@ -19,9 +20,10 @@ constexpr uint32_t addresses[] = {0x84723778, 0x84723CC0, 0x84724930};
 struct Bin {
   uint64_t calls = 0, units = 0, nanoseconds = 0;
 };
-thread_local Bin bins[3][3];
+thread_local Bin bins[3][4];
 thread_local uint32_t selection[3]{0x91E10DA5, 0x7F4A7C15, 0x6E624EB7};
 thread_local uint32_t unpack_selection[3]{0xA24BAED5, 0x9FB21C65, 0xC13FA9A9};
+thread_local uint32_t store_selection[3]{0xB5297A4D, 0x68E31DA4, 0x1B56C4E9};
 thread_local uint64_t previous_flush = 0;
 uint64_t now_ns() {
   return std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -39,15 +41,15 @@ void flush(uint64_t now) {
       uint64_t(std::hash<std::thread::id>{}(std::this_thread::get_id()));
 #endif
   for (unsigned id = 0; id < 3; ++id)
-    for (unsigned variant = 0; variant < 3; ++variant) {
+    for (unsigned variant = 0; variant < 4; ++variant) {
       auto &bin = bins[id][variant];
       if (!bin.calls)
         continue;
-      std::fprintf(output, "%.3f,%llu,0x%08X,%u,%u,%llu,%llu,%llu\n",
+      std::fprintf(output, "%.3f,%llu,0x%08X,%u,%u,%u,%llu,%llu,%llu\n",
                    double(now - origin) / 1000000.0, (unsigned long long)thread,
                    addresses[id], unsigned(variant != 0),
-                   unsigned(variant == 2), (unsigned long long)bin.calls,
-                   (unsigned long long)bin.units,
+                   unsigned(variant >= 2), unsigned(variant == 3),
+                   (unsigned long long)bin.calls, (unsigned long long)bin.units,
                    (unsigned long long)bin.nanoseconds);
       bin = {};
     }
@@ -57,9 +59,10 @@ void flush(uint64_t now) {
 } // namespace
 
 void Ch2k8ConfigureHotFunctions(int selected_mode, int selected_unpack,
-                                const char *path) {
+                                int selected_store, const char *path) {
   mode.store(selected_mode, std::memory_order_release);
   unpack_mode.store(selected_unpack, std::memory_order_release);
+  store_mode.store(selected_store, std::memory_order_release);
   if (!path || !*path)
     return;
   std::lock_guard lock(output_mutex);
@@ -70,7 +73,8 @@ void Ch2k8ConfigureHotFunctions(int selected_mode, int selected_unpack,
 #endif
   if (!output)
     return;
-  std::fputs("elapsed_ms,thread,function,optimized,unpack_optimized,calls,work_"
+  std::fputs("elapsed_ms,thread,function,optimized,unpack_optimized,store_"
+             "optimized,calls,work_"
              "units,wall_ns\n",
              output);
   std::fflush(output);
@@ -107,9 +111,19 @@ bool Ch2k8SelectFastVectorUnpack(unsigned index) {
   state ^= state << 5;
   return bool(state & 1);
 }
+bool Ch2k8SelectFastVectorStore(unsigned index) {
+  const auto selected = store_mode.load(std::memory_order_acquire);
+  if (selected != 2)
+    return selected == 1;
+  auto &state = store_selection[index];
+  state ^= state << 13;
+  state ^= state >> 17;
+  state ^= state << 5;
+  return bool(state & 1);
+}
 Ch2k8HotScope::Ch2k8HotScope(unsigned index, uint32_t descriptor, uint8_t *base,
-                             bool fast, bool unpack)
-    : index_(index), fast_(fast), unpack_(unpack) {
+                             bool fast, bool unpack, bool store)
+    : index_(index), fast_(fast), unpack_(unpack), store_(store) {
   if (!profiling.load(std::memory_order_acquire))
     return;
   // [CONFIRMED] Descriptor fields used by the original loop-count instructions.
@@ -136,7 +150,7 @@ Ch2k8HotScope::~Ch2k8HotScope() {
   if (!started_)
     return;
   const auto now = now_ns();
-  auto &bin = bins[index_][unpack_ ? 2 : fast_ ? 1 : 0];
+  auto &bin = bins[index_][store_ ? 3 : unpack_ ? 2 : fast_ ? 1 : 0];
   ++bin.calls;
   bin.units += units_;
   bin.nanoseconds += now - started_;

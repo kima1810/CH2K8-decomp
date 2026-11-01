@@ -18,9 +18,9 @@ def test_fast_variants_are_scoped_idempotent_and_reject_unreviewed_shapes():
         scalar_pack(f'v{i}', 'v0', i % 2) for i in range(16)) + '\n' + scalar_unpack('v22', 'v23') + '\n}\n'
     transformed, count = optimize_source(body)
     assert count == 16
-    assert transformed.count('Ch2k8PackBiased64(') == 32
-    assert transformed.count('Ch2k8UnpackBiased64(') == 1
-    assert transformed.count('Ch2k8HotScope hot(') == 3
+    assert transformed.count('Ch2k8PackBiased64(') == 48
+    assert transformed.count('Ch2k8UnpackBiased64(') == 2
+    assert transformed.count('Ch2k8HotScope hot(') == 4
     assert optimize_source(transformed) == (transformed, 0)
     assert restore_source(transformed) == body
     unrelated = body.replace('sub_84723778', 'sub_12345678')
@@ -115,6 +115,9 @@ def test_complete_generated_hot_functions_preserve_context_and_guest_writes(tmp_
                 signature = f'static void sub_{address}_unpack_fast('
                 start = text.index(signature)
                 fast[address+'_unpack'] = text[start:text.index('\n}\n', start)+3]
+                signature = f'static void sub_{address}_store_fast('
+                start = text.index(signature)
+                fast[address+'_store'] = text[start:text.index('\n}\n', start)+3]
                 start = text.index(f'DEFINE_REX_FUNC(sub_{address}) {{')
                 body = text[start:text.index('\n}\n', start)+3]
                 bodies[f'sub_{address}'] = body
@@ -128,7 +131,7 @@ def test_complete_generated_hot_functions_preserve_context_and_guest_writes(tmp_
                 start = text.index(signature)
                 bodies[name] = text[start:text.index('\n}\n', start)+3]
     assert wanted <= bodies.keys()
-    header = '#include "ch2k8_pch.h"\n#include "packed_vector_optimized.h"\n'
+    header = '#include "ch2k8_pch.h"\n#include "packed_vector_optimized.h"\n#include "vector_store_optimized.h"\n'
     declarations = '\n'.join(f'REX_EXTERN({name});' for name in bodies)
     support = '''
 #include <windows.h>
@@ -137,9 +140,11 @@ def test_complete_generated_hot_functions_preserve_context_and_guest_writes(tmp_
 #include <vector>
 bool selected = false;
 bool selected_unpack = false;
+bool selected_store = false;
 bool Ch2k8SelectFastVectorPack(unsigned) { return selected; }
 bool Ch2k8SelectFastVectorUnpack(unsigned) { return selected_unpack; }
-Ch2k8HotScope::Ch2k8HotScope(unsigned,uint32_t,uint8_t*,bool,bool) {}
+bool Ch2k8SelectFastVectorStore(unsigned) { return selected_store; }
+Ch2k8HotScope::Ch2k8HotScope(unsigned,uint32_t,uint8_t*,bool,bool,bool) {}
 Ch2k8HotScope::~Ch2k8HotScope() {}
 '''
     main = '''
@@ -149,29 +154,29 @@ int main() {
  if(!memory || !VirtualAlloc(memory,bytes,MEM_COMMIT,PAGE_READWRITE)) return 3;
  std::vector<uint8_t> initial(bytes), expected(bytes);
  PPCFunc* functions[]={sub_84723778,sub_84723CC0,sub_84724930};
- for(unsigned f=0;f<3;++f) for(unsigned trial=0;trial<12;++trial) {
+ for(unsigned f=0;f<3;++f) for(unsigned trial=0;trial<28;++trial) {
   uint32_t seed=0x6E624EB7+trial;
-  for(auto &byte:initial) { seed^=seed<<13;seed^=seed>>17;seed^=seed<<5;byte=uint8_t(seed); }
+  for(auto &byte:initial) { seed^=seed<<13;seed^=seed>>17;seed^=seed<<5;byte=trial<12 ? uint8_t(seed) : uint8_t(0x30|(seed&7)); }
   auto put=[&](uint32_t at,uint32_t value) {value=__builtin_bswap32(value);std::memcpy(initial.data()+at,&value,4);};
   const uint32_t job=0x10000,groups=1+trial%3,units=1+trial%4;
   put(job,groups<<1); put(job+4,(units<<19)|(units<<3));
   put(job+24,0x30000);put(job+32,0x30000);put(job+36,0x40000);
-  put(job+116,0x60000+(trial%4)*4);
+  put(job+116,0x60000+(trial<12 ? (trial%4)*4 : trial-12));
   for(uint32_t group=0;group<groups;++group) put(0x30004+group*12,(units<<16)|(group*128));
   PPCContext a{},b{};a.r1.u64=0x180000;a.r3.u64=job;a.lr=0x12345678;
   a.fpscr.csr=0x1F80;const auto initial_context=a;b=a;
   std::memcpy(memory,initial.data(),bytes);simde_mm_setcsr(0x1F80);selected=false;
   functions[f](a,memory);std::memcpy(expected.data(),memory,bytes);
-  for(unsigned variant=0;variant<2;++variant) {
+  for(unsigned variant=0;variant<3;++variant) {
    b=initial_context;
-   std::memcpy(memory,initial.data(),bytes);simde_mm_setcsr(0x1F80);selected=true;selected_unpack=variant;
+   std::memcpy(memory,initial.data(),bytes);simde_mm_setcsr(0x1F80);selected=true;selected_unpack=variant!=0;selected_store=variant==2;
    functions[f](b,memory);
    if(std::memcmp(&a,&b,sizeof(a)) || std::memcmp(expected.data(),memory,bytes)) {
     printf("Mismatch function=%u trial=%u variant=%u\\n",f,trial,variant);return 2;
    }
   }
  }
- VirtualFree(memory,0,MEM_RELEASE);puts("72 complete function comparisons passed");
+ VirtualFree(memory,0,MEM_RELEASE);puts("252 complete function comparisons passed");
 }
 '''
     source = tmp_path/'whole_functions.cpp'
@@ -185,4 +190,4 @@ int main() {
     assert compilation.returncode == 0, compilation.stderr
     result = subprocess.run([str(executable)], capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert '72 complete function comparisons passed' in result.stdout
+    assert '252 complete function comparisons passed' in result.stdout

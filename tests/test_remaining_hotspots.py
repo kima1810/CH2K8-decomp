@@ -51,6 +51,10 @@ def test_old_pack_only_transform_upgrades_without_changing_retained_baseline():
     start = current.index('static void sub_84723778_unpack_fast(')
     end = current.index('\n}\n', start)+4
     old = current[:start]+current[end:]
+    start = old.index('static void sub_84723778_store_fast(')
+    end = old.index('\n}\n', start)+4
+    old = old[:start]+old[end:]
+    old = old.replace('#include "vector_store_optimized.h"\n', '')
     old = old.replace(MARKER+'\n', OLD_MARKER+'\n', 1).replace(
         dispatch(signature, '84723778', 0), dispatch(signature, '84723778', 0, 1))
     assert restore_source(old) == body

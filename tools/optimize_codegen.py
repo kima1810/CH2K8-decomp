@@ -9,7 +9,8 @@ from pathlib import Path
 
 TARGETS = ('84723778', '84723CC0', '84724930')
 OLD_MARKER = '// CH2K8 measured packed-vector variants'
-MARKER = OLD_MARKER + ' v2'
+V2_MARKER = OLD_MARKER + ' v2'
+MARKER = OLD_MARKER + ' v3'
 
 
 def scalar_pack(dst, src, half):
@@ -37,14 +38,17 @@ def scalar_unpack(dst, src):
     return '\n'.join(lines)
 
 
-def dispatch(signature, address, index, version=2):
+def dispatch(signature, address, index, version=3):
     if version == 1:
         return (signature + '\n' + f'\tif (Ch2k8SelectFastVectorPack({index})) {{\n'
                 f'\t\tsub_{address}_fast(ctx, base);\n\t\treturn;\n\t}}\n'
                 f'\tCh2k8HotScope hot({index}, ctx.r3.u32, base, false);\n')
+    store_dispatch = (f'\t\t\tif (Ch2k8SelectFastVectorStore({index})) {{\n'
+                      f'\t\t\t\tsub_{address}_store_fast(ctx, base);\n\t\t\t}} else {{\n'
+                      f'\t\t\t\tsub_{address}_unpack_fast(ctx, base);\n\t\t\t}}\n') if version == 3 else f'\t\t\tsub_{address}_unpack_fast(ctx, base);\n'
     return (signature + '\n' + f'\tif (Ch2k8SelectFastVectorPack({index})) {{\n'
             f'\t\tif (Ch2k8SelectFastVectorUnpack({index})) {{\n'
-            f'\t\t\tsub_{address}_unpack_fast(ctx, base);\n\t\t}} else {{\n'
+            + store_dispatch + '\t\t} else {\n'
             f'\t\t\tsub_{address}_fast(ctx, base);\n\t\t}}\n\t\treturn;\n\t}}\n'
             f'\tCh2k8HotScope hot({index}, ctx.r3.u32, base, false);\n')
 
@@ -53,7 +57,7 @@ def restore_source(text):
     if OLD_MARKER not in text:
         return text
     marker = text.splitlines()[0]
-    if marker not in (OLD_MARKER, MARKER):
+    if marker not in (OLD_MARKER, V2_MARKER, MARKER):
         raise ValueError('Unknown hot-function transform version')
     for index, address in enumerate(TARGETS):
         signature = f'DEFINE_REX_FUNC(sub_{address}) {{'
@@ -62,18 +66,20 @@ def restore_source(text):
         start = text.index(signature)
         end = text.index('\n}\n', start) + 3
         body = text[start:end]
-        expected = dispatch(signature, address, index, 2 if marker == MARKER else 1)
+        version = 3 if marker == MARKER else 2 if marker == V2_MARKER else 1
+        expected = dispatch(signature, address, index, version)
         if not body.startswith(expected + '\tREX_FUNC_PROLOGUE();'):
             raise ValueError(f'{address}: unrecognized retained baseline dispatcher')
         text = text[:start] + signature + '\n' + body[len(expected):] + text[end:]
-        for suffix in ('fast', 'unpack_fast'):
+        for suffix in ('fast', 'unpack_fast', 'store_fast'):
             pattern = (rf'static void sub_{address}_{suffix}\(PPCContext& __restrict ctx, '
                        r'uint8_t\* base\) \{\n.*?\n\}\n\n?')
             text, removed = re.subn(pattern, '', text, flags=re.S)
-            required = suffix == 'fast' or marker == MARKER
+            required = suffix == 'fast' or (suffix == 'unpack_fast' and version >= 2) or (suffix == 'store_fast' and version == 3)
             if removed != int(required):
                 raise ValueError(f'{address}: unexpected {suffix} copy count')
-    return text.replace(marker+'\n#include "packed_vector_optimized.h"\n', '', 1)
+    includes = '\n#include "vector_store_optimized.h"' if marker == MARKER else ''
+    return text.replace(marker+'\n#include "packed_vector_optimized.h"'+includes+'\n', '', 1)
 
 
 def optimize_source(original_text):
@@ -109,6 +115,18 @@ def optimize_source(original_text):
             unpacked = unpacked.replace(scalar,
                 f'\t// vupkd3d128 {dst},{src},24 (integer SIMD)\n'
                 f'\tCh2k8UnpackBiased64(ctx.{dst}, ctx.{src}, temp, vTemp);', 1)
+        stored = unpacked
+        store_pattern = (r'\t// stvlx (v\d+),([^\n]+)\n(\tea = [^\n]+;\n)'
+                         r'\tfor \(size_t i = 0; i < \(16 - \(ea & 0xF\)\); i\+\+\)\n'
+                         r'\t\tREX_STORE_U8\(ea \+ i, ctx\.\1\.u8\[15 - i\]\);')
+        stored, store_count = re.subn(store_pattern, lambda m:
+            f'\t// stvlx {m[1]},{m[2]} (aligned byte-store path)\n'+m[3]+
+            f'\tCh2k8StoreVectorLeft(base, ea, ctx.{m[1]});', stored)
+        if store_count != body.count('\t// stvlx '):
+            raise ValueError(f'{address}: unexpected store shape')
+        stored = stored.replace(signature,
+            f'static void sub_{address}_store_fast(PPCContext& __restrict ctx, uint8_t* base) {{\n'
+            f'\tCh2k8HotScope hot({index}, ctx.r3.u32, base, true, true, true);', 1)
         unpacked = unpacked.replace(signature,
             f'static void sub_{address}_unpack_fast(PPCContext& __restrict ctx, uint8_t* base) {{\n'
             f'\tCh2k8HotScope hot({index}, ctx.r3.u32, base, true, true);', 1)
@@ -116,10 +134,10 @@ def optimize_source(original_text):
             f'static void sub_{address}_fast(PPCContext& __restrict ctx, uint8_t* base) {{\n'
             f'\tCh2k8HotScope hot({index}, ctx.r3.u32, base, true);', 1)
         baseline = body.replace(signature+'\n', dispatch(signature, address, index), 1)
-        text = text[:start] + optimized + '\n' + unpacked + '\n' + baseline + text[end:]
+        text = text[:start] + optimized + '\n' + unpacked + '\n' + stored + '\n' + baseline + text[end:]
         total += len(sites)
     if total:
-        text = MARKER + '\n#include "packed_vector_optimized.h"\n' + text
+        text = MARKER + '\n#include "packed_vector_optimized.h"\n#include "vector_store_optimized.h"\n' + text
     return text, total if text != original_text else 0
 
 
