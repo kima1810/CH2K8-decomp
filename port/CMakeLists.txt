@@ -79,6 +79,7 @@ if(TARGET ch2k8_recomp)
         DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../tools/run_codegen.py"
                 "${CMAKE_CURRENT_SOURCE_DIR}/../tools/fix_codegen.py"
                 "${CMAKE_CURRENT_SOURCE_DIR}/../tools/optimize_codegen.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/../tools/prove_vector_store_ranges.py"
         COMMAND "${CMAKE_COMMAND}" -E touch
                 "${CMAKE_CURRENT_SOURCE_DIR}/generated/default/codegen.build.stamp"
     )

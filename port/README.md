@@ -30,6 +30,14 @@ Selecting baseline packing or unpacking also bypasses the store optimization.
 See the [aligned-store finding](../docs/findings/2026-11-01-aligned-vector-stores.md)
 for the additional measured 14–15% routine reduction and validation limits.
 
+An additional proven-span native RAM path is enabled by default;
+`--ch2k8_ram_store=baseline` retains ordered byte stores and
+`compare` interleaves both paths. Two routines have statically bounded outputs;
+other routines and ineligible memory retain byte stores. Hot logs distinguish
+`ram_optimized` and count widened/fallback instructions. See the
+[native RAM finding](../docs/findings/2026-11-01-proven-native-ram-stores.md)
+for paired timing, memory safety checks, and whole-game measurement limits.
+
 ## Launcher and Vulkan build
 
 The patched source SDK skips bit-identical shader-constant updates and bulk-decodes

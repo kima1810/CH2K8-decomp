@@ -59,10 +59,12 @@ inline void Ch2k8UnpackBiased64(PPCVRegister &destination,
 bool Ch2k8SelectFastVectorPack(unsigned index);
 bool Ch2k8SelectFastVectorUnpack(unsigned index);
 bool Ch2k8SelectFastVectorStore(unsigned index);
+bool Ch2k8SelectFastRamStore(unsigned index);
 class Ch2k8HotScope {
 public:
   Ch2k8HotScope(unsigned index, uint32_t descriptor, uint8_t *base, bool fast,
-                bool unpack = false, bool store = false);
+                bool unpack = false, bool store = false, bool ram = false,
+                const uint64_t *ram_counts = nullptr);
   ~Ch2k8HotScope();
 
 private:
@@ -72,4 +74,6 @@ private:
   bool fast_ = false;
   bool unpack_ = false;
   bool store_ = false;
+  bool ram_ = false;
+  const uint64_t *ram_counts_ = nullptr;
 };

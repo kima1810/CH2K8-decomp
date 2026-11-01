@@ -1,9 +1,12 @@
 #pragma once
+#include "native_ram_store.h"
 
 // Include after the generated PCH, which defines REX_STORE_U8 and the Windows
 // physical alias adjustment. Keep byte widths, address calculation, and order.
 inline void Ch2k8StoreVectorLeft(uint8_t *base, uint32_t ea,
-                                 const PPCVRegister &source) {
+                                 const PPCVRegister &source,
+                                 Ch2k8RamStoreScope *ram = nullptr) {
+  if (ram && ram->TryStore(base, ea, source)) return;
   if ((ea & 15) == 0) {
     REX_STORE_U8(ea + 0, source.u8[15]);
     REX_STORE_U8(ea + 1, source.u8[14]);

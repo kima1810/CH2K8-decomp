@@ -6,11 +6,13 @@ local. Unknown generator shapes fail rather than silently losing coverage.
 """
 import re
 from pathlib import Path
+from prove_vector_store_ranges import prove_store_span
 
 TARGETS = ('84723778', '84723CC0', '84724930')
 OLD_MARKER = '// CH2K8 measured packed-vector variants'
 V2_MARKER = OLD_MARKER + ' v2'
-MARKER = OLD_MARKER + ' v3'
+V3_MARKER = OLD_MARKER + ' v3'
+MARKER = OLD_MARKER + ' v4'
 
 
 def scalar_pack(dst, src, half):
@@ -38,14 +40,17 @@ def scalar_unpack(dst, src):
     return '\n'.join(lines)
 
 
-def dispatch(signature, address, index, version=3):
+def dispatch(signature, address, index, version=4):
     if version == 1:
         return (signature + '\n' + f'\tif (Ch2k8SelectFastVectorPack({index})) {{\n'
                 f'\t\tsub_{address}_fast(ctx, base);\n\t\treturn;\n\t}}\n'
                 f'\tCh2k8HotScope hot({index}, ctx.r3.u32, base, false);\n')
+    native_dispatch = (f'\t\t\t\tif (Ch2k8SelectFastRamStore({index})) {{\n'
+                       f'\t\t\t\t\tsub_{address}_ram_fast(ctx, base);\n\t\t\t\t}} else {{\n'
+                       f'\t\t\t\t\tsub_{address}_store_fast(ctx, base);\n\t\t\t\t}}\n') if version == 4 else f'\t\t\t\tsub_{address}_store_fast(ctx, base);\n'
     store_dispatch = (f'\t\t\tif (Ch2k8SelectFastVectorStore({index})) {{\n'
-                      f'\t\t\t\tsub_{address}_store_fast(ctx, base);\n\t\t\t}} else {{\n'
-                      f'\t\t\t\tsub_{address}_unpack_fast(ctx, base);\n\t\t\t}}\n') if version == 3 else f'\t\t\tsub_{address}_unpack_fast(ctx, base);\n'
+                      + native_dispatch + '\t\t\t} else {\n'
+                      f'\t\t\t\tsub_{address}_unpack_fast(ctx, base);\n\t\t\t}}\n') if version >= 3 else f'\t\t\tsub_{address}_unpack_fast(ctx, base);\n'
     return (signature + '\n' + f'\tif (Ch2k8SelectFastVectorPack({index})) {{\n'
             f'\t\tif (Ch2k8SelectFastVectorUnpack({index})) {{\n'
             + store_dispatch + '\t\t} else {\n'
@@ -57,7 +62,7 @@ def restore_source(text):
     if OLD_MARKER not in text:
         return text
     marker = text.splitlines()[0]
-    if marker not in (OLD_MARKER, V2_MARKER, MARKER):
+    if marker not in (OLD_MARKER, V2_MARKER, V3_MARKER, MARKER):
         raise ValueError('Unknown hot-function transform version')
     for index, address in enumerate(TARGETS):
         signature = f'DEFINE_REX_FUNC(sub_{address}) {{'
@@ -66,19 +71,19 @@ def restore_source(text):
         start = text.index(signature)
         end = text.index('\n}\n', start) + 3
         body = text[start:end]
-        version = 3 if marker == MARKER else 2 if marker == V2_MARKER else 1
+        version = 4 if marker == MARKER else 3 if marker == V3_MARKER else 2 if marker == V2_MARKER else 1
         expected = dispatch(signature, address, index, version)
         if not body.startswith(expected + '\tREX_FUNC_PROLOGUE();'):
             raise ValueError(f'{address}: unrecognized retained baseline dispatcher')
         text = text[:start] + signature + '\n' + body[len(expected):] + text[end:]
-        for suffix in ('fast', 'unpack_fast', 'store_fast'):
+        for suffix in ('fast', 'unpack_fast', 'store_fast', 'ram_fast'):
             pattern = (rf'static void sub_{address}_{suffix}\(PPCContext& __restrict ctx, '
                        r'uint8_t\* base\) \{\n.*?\n\}\n\n?')
             text, removed = re.subn(pattern, '', text, flags=re.S)
-            required = suffix == 'fast' or (suffix == 'unpack_fast' and version >= 2) or (suffix == 'store_fast' and version == 3)
+            required = suffix == 'fast' or (suffix == 'unpack_fast' and version >= 2) or (suffix == 'store_fast' and version >= 3) or (suffix == 'ram_fast' and version == 4)
             if removed != int(required):
                 raise ValueError(f'{address}: unexpected {suffix} copy count')
-    includes = '\n#include "vector_store_optimized.h"' if marker == MARKER else ''
+    includes = '\n#include "vector_store_optimized.h"' if marker in (V3_MARKER, MARKER) else ''
     return text.replace(marker+'\n#include "packed_vector_optimized.h"'+includes+'\n', '', 1)
 
 
@@ -124,6 +129,19 @@ def optimize_source(original_text):
             f'\tCh2k8StoreVectorLeft(base, ea, ctx.{m[1]});', stored)
         if store_count != body.count('\t// stvlx '):
             raise ValueError(f'{address}: unexpected store shape')
+        rammed = stored
+        proof=prove_store_span(body)
+        if proof:
+            rammed=re.sub(r'Ch2k8StoreVectorLeft\(base, ea, ctx\.(v\d+)\);',
+                r'if (native_span) native_ram.StorePrepared(base, ea, ctx.\1); else { Ch2k8StoreVectorLeft(base, ea, ctx.\1); ++native_ram.counts[1]; }',rammed)
+            load='\tctx.r11.u64 = REX_LOAD_U32(ctx.r3.u32 + 116);'
+            assert rammed.count(load)==1
+            rammed=rammed.replace(load,load+f'\n\tnative_span = native_ram.PrepareSpan(base, ctx.r11.u32, {proof["span"]}, &ctx, sizeof(ctx));',1)
+        rammed = rammed.replace(signature,
+            f'static void sub_{address}_ram_fast(PPCContext& __restrict ctx, uint8_t* base) {{\n'
+            f'\tCh2k8RamStoreScope native_ram(true);\n'
+            f'\tbool native_span = false;\n'
+            f'\tCh2k8HotScope hot({index}, ctx.r3.u32, base, true, true, true, {str(bool(proof)).lower()}, native_ram.counts);', 1)
         stored = stored.replace(signature,
             f'static void sub_{address}_store_fast(PPCContext& __restrict ctx, uint8_t* base) {{\n'
             f'\tCh2k8HotScope hot({index}, ctx.r3.u32, base, true, true, true);', 1)
@@ -134,7 +152,7 @@ def optimize_source(original_text):
             f'static void sub_{address}_fast(PPCContext& __restrict ctx, uint8_t* base) {{\n'
             f'\tCh2k8HotScope hot({index}, ctx.r3.u32, base, true);', 1)
         baseline = body.replace(signature+'\n', dispatch(signature, address, index), 1)
-        text = text[:start] + optimized + '\n' + unpacked + '\n' + stored + '\n' + baseline + text[end:]
+        text = text[:start] + optimized + '\n' + unpacked + '\n' + stored + '\n' + rammed + '\n' + baseline + text[end:]
         total += len(sites)
     if total:
         text = MARKER + '\n#include "packed_vector_optimized.h"\n#include "vector_store_optimized.h"\n' + text

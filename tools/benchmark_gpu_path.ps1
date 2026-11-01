@@ -15,6 +15,8 @@ param(
     [ValidateSet('default', 'baseline', 'optimized')][string]$NativePackets = 'default',
     [switch]$GpuStats,
     [switch]$PacketCompare,
+    [switch]$HotFunctions,
+    [ValidateSet('default','baseline','optimized','compare')][string]$RamStore = 'default',
     [switch]$ValidateOnly
 )
 $ErrorActionPreference = 'Stop'
@@ -51,6 +53,8 @@ if ($NativeConstants -eq 'baseline') { $arguments += '--no-ch2k8_native_constant
 elseif ($NativeConstants -eq 'optimized') { $arguments += '--ch2k8_native_constants' }
 if ($GpuStats) { $arguments += '--ch2k8_gpu_stats' }
 if ($PacketCompare) { $arguments += '--ch2k8_packet_compare' }
+if ($HotFunctions) { $arguments += "--ch2k8_hot_log=$(Join-Path $runRoot 'hot-functions.csv')" }
+if ($RamStore -ne 'default') { $arguments += "--ch2k8_ram_store=$RamStore" }
 if ($NativePackets -eq 'baseline') { $arguments += '--no-ch2k8_native_packets' }
 elseif ($NativePackets -eq 'optimized') { $arguments += '--ch2k8_native_packets' }
 foreach ($argument in $arguments) {

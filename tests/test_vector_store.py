@@ -80,11 +80,14 @@ def test_v2_upgrade_retains_baseline_and_rejects_changed_store_shape():
     body = signature+'\n\tREX_FUNC_PROLOGUE();\n'+'\n'.join(
         scalar_pack(f'v{i}', 'v0', i%2) for i in range(16))+'\n'+scalar_unpack('v22','v23')+'\n'+store+'\n}\n'
     current, _ = optimize_source(body)
-    assert current.count('Ch2k8StoreVectorLeft(') == 1
+    assert current.count('Ch2k8StoreVectorLeft(') == 2
     assert restore_source(current) == body
     start = current.index('static void sub_84723778_store_fast(')
     end = current.index('\n}\n', start)+4
     old = (current[:start]+current[end:]).replace(MARKER+'\n', V2_MARKER+'\n', 1)
+    start = old.index('static void sub_84723778_ram_fast(')
+    end = old.index('\n}\n', start)+4
+    old = old[:start]+old[end:]
     old = old.replace('#include "vector_store_optimized.h"\n', '').replace(
         dispatch(signature, '84723778', 0), dispatch(signature, '84723778', 0, 2))
     assert restore_source(old) == body

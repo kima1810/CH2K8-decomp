@@ -25,7 +25,7 @@ REXCVAR_DEFINE_STRING(ch2k8_renderer, "d3d12", "CH2K8/Graphics",
 bool Ch2k8OpenFrameLog(const char *path);
 void Ch2k8CloseFrameLog();
 void Ch2k8ConfigureHotFunctions(int selected_mode, int selected_unpack,
-                                int selected_store, const char *path);
+                                int selected_store, int selected_ram, const char *path);
 void Ch2k8CloseHotLog();
 REXCVAR_DEFINE_STRING(ch2k8_vector_pack, "optimized", "CH2K8/Performance",
                       "Packed-vector path: baseline, optimized, or compare")
@@ -41,6 +41,9 @@ REXCVAR_DEFINE_STRING(ch2k8_vector_store, "optimized", "CH2K8/Performance",
                       "baseline, optimized, or compare")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
 bool Ch2k8SaveOutput(rex::ui::Presenter *presenter, const char *path);
+REXCVAR_DEFINE_STRING(ch2k8_ram_store, "optimized", "CH2K8/Performance",
+                      "Guarded RAM vector stores: baseline, optimized, or compare")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
 REXCVAR_DEFINE_STRING(ch2k8_output_capture, "", "CH2K8/Diagnostics",
                       "Opt-in native guest-output BMP filename prefix");
 REXCVAR_DEFINE_INT32(ch2k8_output_capture_delay, 60, "CH2K8/Diagnostics",
@@ -108,6 +111,11 @@ protected:
     const auto pack = REXCVAR_GET(ch2k8_vector_pack);
     const auto unpack = REXCVAR_GET(ch2k8_vector_unpack);
     const auto store = REXCVAR_GET(ch2k8_vector_store);
+    const auto ram = REXCVAR_GET(ch2k8_ram_store);
+    if (ram != "baseline" && ram != "optimized" && ram != "compare") {
+      REXLOG_ERROR("Invalid ch2k8_ram_store: {}", ram);
+      std::exit(EXIT_FAILURE);
+    }
     if (store != "baseline" && store != "optimized" && store != "compare") {
       REXLOG_ERROR("Invalid ch2k8_vector_store: {}", store);
       std::exit(EXIT_FAILURE);
@@ -129,10 +137,12 @@ protected:
                                store == "compare"     ? 2
                                : store == "optimized" ? 1
                                                       : 0,
+                               ram == "compare" ? 2 : ram == "optimized" ? 1 : 0,
                                REXCVAR_GET(ch2k8_hot_log).c_str());
     REXLOG_INFO("CH2K8 packed-vector path: {}", pack);
     REXLOG_INFO("CH2K8 vector-unpack path: {}", unpack);
     REXLOG_INFO("CH2K8 vector-store path: {}", store);
+    REXLOG_INFO("CH2K8 guarded RAM-store path: {}", ram);
     const auto output_prefix = REXCVAR_GET(ch2k8_output_capture);
     auto graphics = runtime()->graphics_system();
     if (!output_prefix.empty() && graphics && graphics->presenter()) {

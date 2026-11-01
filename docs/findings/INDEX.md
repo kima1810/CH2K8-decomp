@@ -1,5 +1,7 @@
 # Findings index
 
+- [2026-11-01 Proven native RAM stores](2026-11-01-proven-native-ram-stores.md): fresh profiling locates nearly a full worker core in three vertex routines; per-job bounds proof enables native stores in two routines, reducing their paired work costs 18–19%. Whole-game high FPS remains unestablished.
+
 - [2026-11-01 Native constant state and packet decoding](2026-11-01-native-constant-state.md): cache skips 61% of shader-update requests; interleaved bulk decoding costs 71% less per word. Add native/accurate launcher choices and reliable DLL staging. Vulkan FBO black frames reproduce with optimizations disabled; Automatic selects ROV/FSI.
 
 - [2026-11-01 Native GPU backend investigation](2026-11-01-gpu-backend-investigation.md): current Vulkan FBO/FSI and D3D12 RTV reach live demo play; roughly 55–60 ms guest submissions persist. Batching has no verified gain. Add bounded remote GPU experiments with native readbacks, CPU/AMD telemetry, profile validation and explicit comparison limits.

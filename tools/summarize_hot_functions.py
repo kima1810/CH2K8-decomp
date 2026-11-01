@@ -7,15 +7,16 @@ from pathlib import Path
 
 
 def summarize(path, start=0, end=float('inf')):
-    totals = defaultdict(lambda: {'calls': 0, 'work_units': 0, 'wall_ns': 0})
+    totals = defaultdict(lambda: {'calls': 0, 'work_units': 0, 'wall_ns': 0,
+                                 'wide_stores': 0, 'byte_stores': 0})
     with Path(path).open(encoding='utf-8-sig') as stream:
         for row in csv.DictReader(stream):
             if not start <= float(row['elapsed_ms'])/1000 < end:
                 continue
-            variant = 'pack_unpack_store' if row.get('store_optimized') == '1' else 'pack_unpack' if row.get('unpack_optimized') == '1' else 'optimized' if row['optimized'] == '1' else 'baseline'
+            variant = 'native_ram' if row.get('ram_optimized') == '1' else 'pack_unpack_store' if row.get('store_optimized') == '1' else 'pack_unpack' if row.get('unpack_optimized') == '1' else 'optimized' if row['optimized'] == '1' else 'baseline'
             total = totals[(row['function'], variant)]
             for key in total:
-                total[key] += int(row[key])
+                total[key] += int(row.get(key, 0))
     result = {}
     for (address, variant), total in sorted(totals.items()):
         total['ns_per_call'] = total['wall_ns']/total['calls'] if total['calls'] else None
