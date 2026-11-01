@@ -128,6 +128,11 @@ the built-in readback API provides the alternative validation path.
 
 ## Conclusion and open questions
 
+The [native-state follow-up](2026-11-01-native-constant-state.md) adds native
+constant caching and bulk packet decoding. Subsequent black FBO captures
+reproduce with those features disabled, so Automatic Vulkan now requests FSI
+and native render targets remain an explicitly experimental launcher choice.
+
 The [later GPU-backend investigation](2026-11-01-gpu-backend-investigation.md)
 extends Vulkan FBO and FSI validation to live demo gameplay, with visible HUDs
 and advancing clocks after the CPU optimizations. It also compares the native

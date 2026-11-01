@@ -2,6 +2,12 @@
 
 ## Question
 
+Follow-up: the [native-state investigation](2026-11-01-native-constant-state.md)
+reproduces completely black FBO images with both new optimizations disabled.
+Earlier coherent snapshots below do not establish general native-target
+compatibility. Automatic Vulkan launching now requests FSI. The earlier CPU
+accounting gap between APIs also does not repeat in the later runs.
+
 Can native D3D12 or Vulkan rendering remove the remaining lag after the CPU
 vector optimizations? Which backend changes are supported by live evidence?
 

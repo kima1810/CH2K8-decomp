@@ -1,5 +1,7 @@
 # Findings index
 
+- [2026-11-01 Native constant state and packet decoding](2026-11-01-native-constant-state.md): cache skips 61% of shader-update requests; interleaved bulk decoding costs 71% less per word. Add native/accurate launcher choices and reliable DLL staging. Vulkan FBO black frames reproduce with optimizations disabled; Automatic selects ROV/FSI.
+
 - [2026-11-01 Native GPU backend investigation](2026-11-01-gpu-backend-investigation.md): current Vulkan FBO/FSI and D3D12 RTV reach live demo play; roughly 55–60 ms guest submissions persist. Batching has no verified gain. Add bounded remote GPU experiments with native readbacks, CPU/AMD telemetry, profile validation and explicit comparison limits.
 
 - [2026-11-01 Aligned vector byte stores](2026-11-01-aligned-vector-stores.md): preserve ordered volatile byte writes while removing aligned-loop overhead at 48 sites. Interleaved rendering measures another 14–15% lower routine work cost; 252 full-function comparisons and address/alias traces validate the candidate. Whole-game FPS gains remain unestablished.

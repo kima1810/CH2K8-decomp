@@ -32,6 +32,14 @@ for the additional measured 14–15% routine reduction and validation limits.
 
 ## Launcher and Vulkan build
 
+The patched source SDK skips bit-identical shader-constant updates and bulk-decodes
+pure constant packets. Both are enabled by default in the dual-backend build.
+Their fallbacks are `--no-ch2k8_native_constants` and `--no-ch2k8_native_packets`.
+`--ch2k8_gpu_stats` and `--ch2k8_packet_compare` enable diagnostic statistics and
+randomized packet timing. Run `tools/build_vulkan_sdk.ps1` to apply the checked
+SDK patches; the original binary-only SDK does not contain these controls.
+See the [native-state finding](../docs/findings/2026-11-01-native-constant-state.md).
+
 For autonomous GPU comparisons, run `tools/benchmark_gpu_path.ps1 -Profile vulkan-fsi`
 from PowerShell. It stops its own game after 210 seconds and records native
 images, guest submission cadence, CPU samples and optional local AMD telemetry.
@@ -39,11 +47,14 @@ Other profiles include `d3d12-rov`, `d3d12-rtv`, `vulkan-fbo` and explicit
 `-batched` experiments; `-ValidateOnly` emits arguments without launching.
 Summarize with `tools/summarize_gpu_run.py RUN_DIRECTORY`. These demos do not
 lock matchup/camera state. See the [GPU backend finding](../docs/findings/2026-11-01-gpu-backend-investigation.md)
-for measured results and native-renderer limits. Normal renderer defaults are unchanged.
+for measured results and native-renderer limits.
 
 Open `Launch CH2K8.cmd` in the repository root for renderer, resolution,
 refresh rate, window mode and extracted game-folder controls. D3D12 uses the
-working ROV path. Vulkan is an experimental native backend through the pinned
+working ROV path. Automatic Vulkan now requests accurate FSI blending, following
+black-frame failures on the native FBO path. The Rendering mode choice exposes
+native RTV/FBO targets experimentally; they may flash black in some scenes.
+Vulkan is an experimental native backend through the pinned
 Xenos-to-SPIR-V runtime. Choices are saved after launching in
 `port/userdata/launcher.json`.
 
