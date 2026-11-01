@@ -31,6 +31,7 @@ include("${CMAKE_CURRENT_BINARY_DIR}/rexglue.cmake")
 
 set(CH2K8_SOURCES
     src/main.cpp
+    src/frame_timing.cpp
 )
 
 if(WIN32)

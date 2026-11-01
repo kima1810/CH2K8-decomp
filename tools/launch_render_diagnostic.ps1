@@ -33,7 +33,8 @@ $runtimeLog = Join-Path $runRoot 'runtime.log'
 $performanceLog = Join-Path $runRoot 'process.csv'
 $arguments = @(
     "--game_data_root=$GameData", '--gpu_plugin=xenos',
-    "--user_data_root=$UserData", "--log_file=$runtimeLog"
+    "--user_data_root=$UserData", "--log_file=$runtimeLog",
+    "--ch2k8_frame_log=$(Join-Path $runRoot 'guest-frames.csv')"
 )
 switch ($Profile) {
     'rov' { $arguments += '--render_target_path_d3d12=rov' }
