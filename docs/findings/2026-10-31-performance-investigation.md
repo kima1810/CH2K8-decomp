@@ -136,8 +136,8 @@ presentation records dominate. Use time windows and tail statistics:
 
 During seconds 180–240, GPU wait p99 is only **0.063 ms**, with a maximum of
 **0.108 ms**. Near the end, one GPU-busy record reaches **1,058 ms**. These
-measurements support a GPU execution bottleneck in the expensive periods,
-not a simple application-wide CPU utilization limit. They do not identify
+measurements identify expensive GPU-associated presentation records, but do
+not isolate the critical path of a gameplay frame. They do not identify
 individual draws/shaders, distinguish overdraw from bandwidth/ROV ordering,
 or constitute gameplay FPS. Presentation scheduling alone has not eliminated
 the long GPU work; there is no matched normal-ROV GPU capture proving its
@@ -163,6 +163,12 @@ Changing DXBC control-flow generation is not promoted as an optimization:
 [Xenia's upstream implementation](https://github.com/xenia-project/xenia/blob/master/src/xenia/gpu/dxbc_shader_translator.cc)
 documents driver-dependent stability issues and recommends switch flow on AMD.
 No verified performance fix is claimed yet.
+
+Subsequent [remote device and guest-frame profiling](2026-10-31-remote-renderer-profiling.md)
+finds normal GPU clocks, roughly 78 ms submission intervals and roughly 19 ms
+summed GPU action cost per repeated scene batch. This narrows the earlier
+interpretation: the PresentMon records alone do not establish that the RX 6650 XT
+is underpowered, or distinguish CPU, synchronization and GPU execution delays.
 
 Validation of this follow-up: host rebuild **PASS**, full suite **32 passed,
 1 skipped**, and the Windows PowerShell GUI-stub smoke confirms trace metadata,

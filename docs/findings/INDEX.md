@@ -1,6 +1,8 @@
 # Findings index
 
-- [2026-10-31 Performance investigation](2026-10-31-performance-investigation.md): completed 319-second user trace identifies 30.95 seconds of startup pipeline creation and later GPU-busy periods around 200–250 ms. UI presentation scheduling has not removed the long GPU work. Add timing-tail statistics and bounded capture cleanup; individual expensive ROV draws remain unidentified.
+- [2026-10-31 Remote renderer profiling](2026-10-31-remote-renderer-profiling.md): autonomous device captures, guest submission probes and read-only AMD telemetry establish roughly 78 ms submission intervals, normal GPU clocks, and roughly 19 ms summed action time per repeated scene batch. CPU/synchronization leads remain; AVX2 and RTV draw-extent experiments show no verified speedup.
+
+- [2026-10-31 Performance investigation](2026-10-31-performance-investigation.md): completed 319-second user trace identifies 30.95 seconds of startup pipeline creation and later GPU-busy presentation records around 200–250 ms. These are not individual gameplay-frame times; see the subsequent remote profiling finding for refined attribution.
 
 - [2026-10-31 Live gameplay black screen](2026-10-31-live-gameplay-black-screen.md): user confirms ROV restores live gameplay, replay and camera edits; approximately 272-second run closes normally. ROV becomes the working launcher setting; slowdown, one black player head and depth-resolve warnings remain under investigation.
 

@@ -167,3 +167,12 @@ and expensive later GPU work. Whole-run medians hide that cost; use bounded
 timeline windows, p99 and long-record counts. No performance fix is verified.
 Captures now have a default 600-second stop timer (`-CaptureSeconds` overrides
 it), and `trace.json` records the exact session/PIDs for targeted cleanup.
+
+Remote profiling can run without capture-key input. The diagnostic launcher
+also writes `guest-frames.csv`; use `tools/summarize_guest_frames.py` with
+`--start`/`--end` to inspect guest submission cadence. Optional timed RenderDoc
+device captures and native replay/AMD telemetry tools are documented in the
+[remote profiling finding](../docs/findings/2026-10-31-remote-renderer-profiling.md).
+The later measurements refine the GPU attribution above: normal clocks and
+substantial gaps outside summed draw costs point to CPU/synchronization work
+still requiring investigation. There is no verified speed fix yet.
