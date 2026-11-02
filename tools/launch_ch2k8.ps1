@@ -71,6 +71,17 @@ function Get-LaunchConfiguration {
 function Start-Ch2k8 {
     param($Configuration)
     if (Get-Process ch2k8 -ErrorAction SilentlyContinue) { throw 'CH2K8 is already running.' }
+    $rootArgument = $Configuration.arguments | Where-Object { $_.StartsWith('--game_data_root=') }
+    $assetRoot = $rootArgument.Substring('--game_data_root='.Length)
+    if (Test-Path -LiteralPath (Join-Path $assetRoot 'assets.json')) {
+        if ($Configuration.arguments -contains '--ch2k8_renderer=vulkan') {
+            throw 'Native DDS replacement currently requires Direct3D 12. Choose D3D12 for the folder installation.'
+        }
+        $python = Join-Path $repoRoot 'port/out/python-env/Scripts/python.exe'
+        if (-not (Test-Path -LiteralPath $python)) { throw 'Asset preparation needs the project Python environment. See port/README.md.' }
+        & $python (Join-Path $repoRoot 'tools/loose_assets.py') prepare $assetRoot
+        if ($LASTEXITCODE -ne 0) { throw 'Loose asset validation failed. The game was not started.' }
+    }
     $nativeArguments = $Configuration.arguments | ForEach-Object { '"' + $_ + '"' }
     Start-Process -FilePath $Configuration.executable -WorkingDirectory (Split-Path -Parent $Configuration.executable) -ArgumentList $nativeArguments -WindowStyle Normal -PassThru
 }

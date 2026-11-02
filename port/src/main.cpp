@@ -10,6 +10,8 @@
 #include <rex/logging.h>
 #include <rex/rex_app.h>
 #include <rex/system.h>
+#include <rex/runtime.h>
+#include <rex/filesystem.h>
 #include <rex/system/gpu_plugin.h>
 #include <rex/ui/presenter.h>
 
@@ -22,8 +24,14 @@
 REXCVAR_DEFINE_STRING(ch2k8_renderer, "d3d12", "CH2K8/Graphics",
                       "Native graphics backend: d3d12 or vulkan")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+REXCVAR_DEFINE_BOOL(ch2k8_native_dds, true, "CH2K8/Graphics",
+                    "Use native DDS replacements from a loose Xbox installation (D3D12)")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+REXCVAR_DEFINE_BOOL(ch2k8_native_audio,true,"CH2K8/Audio","Use native fixed-duration PCM WAV resources")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
 
 bool Ch2k8OpenFrameLog(const char *path);
+bool Ch2k8MountLooseAssets(rex::Runtime& runtime);
 void Ch2k8CloseFrameLog();
 void Ch2k8ConfigureHotFunctions(int selected_mode, int selected_unpack,
                                 int selected_store, int selected_ram,
@@ -96,6 +104,30 @@ public:
 protected:
   void OnPreSetup(rex::RuntimeConfig &config) override {
     const auto renderer = REXCVAR_GET(ch2k8_renderer);
+    const auto asset_root=rex::to_path(REXCVAR_GET(game_data_root));
+    const bool native_dds=REXCVAR_GET(ch2k8_native_dds) && renderer=="d3d12" &&
+        std::filesystem::exists(asset_root/"assets.map");
+#if !CH2K8_HAS_NATIVE_DDS
+    if (native_dds) {
+      const std::string message="Native DDS needs the patched source SDK. Build the win-amd64-vulkan preset or disable ch2k8_native_dds.";
+      REXLOG_ERROR("{}",message);
+      rex::ShowSimpleMessageBox(rex::SimpleMessageBoxType::Error,message);
+      std::exit(EXIT_FAILURE);
+    }
+#endif
+    // Set this before initializing the GPU plugin, whose lazy DDS catalog is
+    // private to its DLL. The folder VFS remains active when DDS is disabled.
+#ifdef _WIN32
+    const bool native_audio=REXCVAR_GET(ch2k8_native_audio) && std::filesystem::exists(asset_root/"assets.map");
+    _wputenv_s(L"CH2K8_ASSET_ROOT",native_dds || native_audio?asset_root.c_str():L"");
+    _putenv_s("CH2K8_NATIVE_DDS",native_dds?"1":"0");
+    _putenv_s("CH2K8_NATIVE_AUDIO",native_audio?"1":"0");
+#else
+    const bool native_audio=REXCVAR_GET(ch2k8_native_audio) && std::filesystem::exists(asset_root/"assets.map");
+    setenv("CH2K8_ASSET_ROOT",native_dds || native_audio?asset_root.c_str():"",1);
+    setenv("CH2K8_NATIVE_DDS",native_dds?"1":"0",1);
+    setenv("CH2K8_NATIVE_AUDIO",native_audio?"1":"0",1);
+#endif
     if (renderer == "d3d12" || renderer == "vulkan") {
       config.graphics = rex::system::LoadGpuPlugin("xenos", renderer);
       if (config.graphics) {
@@ -115,6 +147,7 @@ protected:
   }
 
   void OnPostSetup() override {
+    if (!Ch2k8MountLooseAssets(*runtime())) std::exit(EXIT_FAILURE);
     const auto pack = REXCVAR_GET(ch2k8_vector_pack);
     const auto unpack = REXCVAR_GET(ch2k8_vector_unpack);
     const auto store = REXCVAR_GET(ch2k8_vector_store);

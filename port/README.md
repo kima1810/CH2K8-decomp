@@ -1,5 +1,9 @@
 # Building the Xbox 360 recompilation
 
+Folder-based Xbox installations, editable SCNE/ROST components and native D3D12
+DDS replacements are documented in [loose assets](../docs/formats/loose_assets.md).
+Use the patched source SDK / `win-amd64-vulkan` preset for native DDS support.
+
 This is an experimental native port. Successful code generation or compilation
 does not establish that menus or gameplay work.
 

@@ -9,6 +9,12 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Python3 3.11 REQUIRED COMPONENTS Interpreter)
+add_library(ch2k8_asset_codec SHARED ../tools/asset_codec.cpp)
+if(WIN32)
+    add_executable(ch2k8_assets_check ../tools/native_assets_check.cpp)
+    target_compile_definitions(ch2k8_assets_check PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_link_libraries(ch2k8_assets_check PRIVATE d3d12 dxgi)
+endif()
 
 # Keep the generated SDK boilerplate intact. Include a build-directory copy
 # whose codegen command preserves the manifest timestamp after a no-op rewrite.
@@ -28,6 +34,19 @@ file(CONFIGURE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/rexglue.cmake"
     CONTENT "${CH2K8_SDK_CMAKE_CONTENT}" @ONLY)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CH2K8_SDK_CMAKE}")
 include("${CMAKE_CURRENT_BINARY_DIR}/rexglue.cmake")
+set(CH2K8_GAME_SOURCE "" CACHE FILEPATH "Xbox ISO or extracted disc directory for folder import")
+set(CH2K8_ASSET_DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/out/folder-game" CACHE PATH "New folder installation directory")
+if(CH2K8_GAME_SOURCE)
+    add_custom_target(ch2k8_import_assets
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../tools/loose_assets.py"
+                import "${CH2K8_GAME_SOURCE}" "${CH2K8_ASSET_DESTINATION}"
+        DEPENDS ch2k8_asset_codec
+        USES_TERMINAL VERBATIM)
+endif()
+if(WIN32)
+    add_executable(ch2k8_vfs_check ../tools/loose_vfs_check.cpp src/loose_device.cpp)
+    target_link_libraries(ch2k8_vfs_check PRIVATE rex::runtime)
+endif()
 
 option(CH2K8_REQUIRE_VULKAN "Require a Vulkan-capable installed SDK" OFF)
 if(CH2K8_REQUIRE_VULKAN)
@@ -42,6 +61,7 @@ set(CH2K8_SOURCES
     src/frame_timing.cpp
     src/output_capture.cpp
     src/hot_functions.cpp
+    src/loose_device.cpp
 )
 
 if(WIN32)
@@ -61,6 +81,14 @@ endif()
 # pinned SDK does not install that dependency's header. Use our licensed copy.
 target_include_directories(ch2k8 PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 target_compile_definitions(ch2k8 PRIVATE CH2K8_VERSION="${PROJECT_VERSION}")
+get_target_property(CH2K8_RUNTIME_INCLUDES rex::runtime INTERFACE_INCLUDE_DIRECTORIES)
+set(CH2K8_NATIVE_DDS_AVAILABLE 0)
+foreach(CH2K8_INCLUDE IN LISTS CH2K8_RUNTIME_INCLUDES)
+    if(EXISTS "${CH2K8_INCLUDE}/rex/graphics/native_dds.h")
+        set(CH2K8_NATIVE_DDS_AVAILABLE 1)
+    endif()
+endforeach()
+target_compile_definitions(ch2k8 PRIVATE CH2K8_HAS_NATIVE_DDS=${CH2K8_NATIVE_DDS_AVAILABLE})
 if(WIN32)
     # Preserve the generated code's line tables in a PDB for startup debugging.
     target_link_options(ch2k8 PRIVATE "LINKER:/DEBUG:FULL" "LINKER:/INCREMENTAL:NO")
