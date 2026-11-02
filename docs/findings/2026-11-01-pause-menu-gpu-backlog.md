@@ -49,3 +49,7 @@ Determine how much native ROV serialization remains after shader simplification.
 Both Windows Release builds pass, and the pinned dual-backend SDK builds and installs. The repository suite passes **90 tests, one environment-dependent skip**. Key tests exercise 524,288 interpolation round-trips and all 128 seven-bit depth patterns, including reserved dynamic fallbacks. Checked source preparation upgrades the published pixel patch and rejects unknown edits before writing.
 
 Use `capture_gpu_workload.ps1 -ShaderState optimized -ManualTrigger -GpuStats -DurationSeconds 600`, navigate manually, then create the run directory's empty `capture.trigger` file. The five-second device capture spans host presentation calls. `--ch2k8_gpu_stats` enables optional one-second wait summaries; detailed wait records are rate-limited. Neither the trigger nor these timers sends game input. Close the game before measuring replay GPU costs. The existing `--no-ch2k8_native_depth_state` fallback restores dynamic depth/hint handling; the general pixel-state fallback remains available.
+
+## Subsequent resolution
+
+The [native pause-menu fix](2026-11-01-native-pause-fix.md) supersedes the open lag conclusion above: the user validates responsive menus and no flashes with native D3D12 and bounded ownership extents, including their ordinary 1440p borderless launcher. The shader measurements here remain separate historical controls.

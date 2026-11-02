@@ -35,3 +35,5 @@ Assess remaining native ROV/MSAA costs. The paused recording processes a full-re
 ## Validation
 
 The full repository suite passes **91 tests, one environment-dependent skip**. Both Release game builds and the pinned dual-backend SDK build/install pass. Exhaustive key checks cover **49,152** disjoint full/dynamic-mask pixel states, plus 524,288 interpolation round-trips and all 128 depth/hint patterns. The format contract uses the actual upstream function across 4,096 input combinations. The schema/cache version is bumped for both the biased key and updated blend palette. Unknown formats, reserved MSAA modes and controls outside the exact palette retain dynamic handling. All game assets, bytecode, captures and logs remain local.
+
+The subsequent [native pause-menu configuration](2026-11-01-native-pause-fix.md) resolves the user-tested lag and black flashes; these shader improvements remain in the retained ROV compatibility path.

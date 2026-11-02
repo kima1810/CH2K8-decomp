@@ -51,8 +51,11 @@ function Get-LaunchConfiguration {
     elseif ($Mode -eq 'exclusive') { $arguments += @('--fullscreen', '--fullscreen_exclusive') }
     else { $arguments += @('--fullscreen', '--no-fullscreen_exclusive') }
     if ($Backend -eq 'd3d12') {
-        $target = if ($Path -eq 'native') { 'rtv' } else { 'rov' }
+        $target = if ($Path -eq 'accurate') { 'rov' } else { 'rtv' }
         $arguments += "--render_target_path_d3d12=$target"
+        if ($target -eq 'rtv') {
+            $arguments += @('--execute_unclipped_draw_vs_on_cpu', '--no-async_shader_compilation')
+        }
     } else {
         $target = if ($Path -eq 'native') { 'fbo' } else { 'fsi' }
         $arguments += "--render_target_path_vulkan=$target"
@@ -143,7 +146,7 @@ $form.Controls.Add($rate)
 $null = Add-Label 'Rendering mode' 24 229 560
 $renderMode = Add-Choice @('Automatic', 'Native render targets', 'Accurate Xbox blending') 24 255 562
 $renderMode.SelectedIndex = @('auto', 'native', 'accurate').IndexOf($RenderPath)
-$hint = Add-Label 'Native targets are experimental and may flash black. Automatic uses accurate blending. 60 Hz retains original timing.' 24 296 570
+$hint = Add-Label 'Automatic uses tested native D3D12 rendering. Accurate Xbox blending is the compatibility fallback; Vulkan native targets remain experimental.' 24 296 570
 $hint.ForeColor = [System.Drawing.Color]::Silver
 $hint.Height = 40
 $null = Add-Label 'Extracted game folder' 24 344 560

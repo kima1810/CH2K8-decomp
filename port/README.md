@@ -83,10 +83,11 @@ lock matchup/camera state. See the [GPU backend finding](../docs/findings/2026-1
 for measured results and native-renderer limits.
 
 Open `Launch CH2K8.cmd` in the repository root for renderer, resolution,
-refresh rate, window mode and extracted game-folder controls. D3D12 uses the
-working ROV path. Automatic Vulkan now requests accurate FSI blending, following
-black-frame failures on the native FBO path. The Rendering mode choice exposes
-native RTV/FBO targets experimentally; they may flash black in some scenes.
+refresh rate, window mode and extracted game-folder controls. Automatic D3D12
+uses native render targets with bounded ownership extents and synchronous
+pipeline creation. Accurate Xbox blending retains ROV for compatibility.
+Automatic Vulkan uses accurate FSI blending; its native FBO option remains
+experimental following black-frame failures.
 Vulkan is an experimental native backend through the pinned
 Xenos-to-SPIR-V runtime. Choices are saved after launching in
 `port/userdata/launcher.json`.
@@ -317,5 +318,13 @@ controlled depth specialization in both capture and ordinary benchmark tools.
 The [menu write/blend finding](../docs/findings/2026-11-01-menu-write-and-blend.md)
 records an incremental 3% timed-menu GPU reduction for full writes and a 29.76%
 reduction for the selected asymmetric overlay draw, with identical replay output.
-These are GPU-cost measurements; severe menu lag and whole-game FPS remain open.
+These are GPU-cost measurements; the menu lag and black flashes are subsequently resolved in the user-tested native D3D12 configuration below; whole-game FPS remains unestablished.
 Both benchmark/capture scripts accept `-FullWrite baseline|optimized` for controls.
+
+Automatic D3D12 now uses native render targets with bounded ownership extents
+and synchronous pipeline creation. The user validated responsive 2K Nav and
+no black flashes in gameplay/replay/camera changes, including their normal
+2560x1440 borderless launch. Persistent caching stays enabled. Accurate Xbox
+blending retains the slower ROV compatibility fallback; Vulkan Automatic stays
+FSI and its native FBO mode remains experimental. See the
+[native pause-menu fix](../docs/findings/2026-11-01-native-pause-fix.md).

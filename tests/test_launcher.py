@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.mark.parametrize('backend,mode,flags', [
-    ('d3d12', 'windowed', ['--no-fullscreen', '--render_target_path_d3d12=rov']),
+    ('d3d12', 'windowed', ['--no-fullscreen', '--render_target_path_d3d12=rtv', '--execute_unclipped_draw_vs_on_cpu', '--no-async_shader_compilation']),
     ('vulkan', 'exclusive', ['--fullscreen', '--fullscreen_exclusive', '--render_target_path_vulkan=fsi']),
     ('vulkan', 'borderless', ['--fullscreen', '--no-fullscreen_exclusive', '--render_target_path_vulkan=fsi']),
 ])
@@ -65,4 +65,9 @@ def test_launcher_selects_native_or_accurate_targets(tmp_path, backend, path, ta
         '-RenderPath', path, '-Executable', str(program), '-GameData', str(data)],
         capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
-    assert target in json.loads(result.stdout)['arguments']
+    arguments=json.loads(result.stdout)['arguments']
+    assert target in arguments
+    bounded='--execute_unclipped_draw_vs_on_cpu' in arguments
+    synchronous='--no-async_shader_compilation' in arguments
+    assert bounded == (backend=='d3d12' and path=='native')
+    assert synchronous == bounded
