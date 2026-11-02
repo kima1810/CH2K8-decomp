@@ -188,6 +188,14 @@ field edit. Check native upload log lines. The game was not launched during work
 
 ## Baseline references
 
+### Paired component update
+
+Fresh direct imports split paired CPU/GPU resources into decoded component files,
+preserving unclaimed gaps and shared identities. No original combined paired
+payload is required afterward. Existing-install conversion retains backups by
+default. See [paired component evidence](../findings/2026-11-02-paired-components.md)
+for preservation checks, interrupted-conversion handling and gameplay limits.
+
 Read-only CH Extractor sources: `docs/TEXTURE_CONVERSION.md`,
 `docs/ROSTER_EDITOR.md`, `choops_py/archive/folder_import.py`,
 `formats/standard_iff.py`, `formats/compression.py` and its DDS workflow. Their

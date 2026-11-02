@@ -283,6 +283,9 @@ def import_disc(source, output, textures=True, direct=False):
     if direct:
         manifest.pop('segments');manifest.pop('parts')
     write_json(output/'assets.json',manifest)
+    if direct:
+        from materialize_paired import materialize
+        materialize(output,keep_originals=False)
     if not direct:write_map(output,manifest)
     prepare(output)
     return manifest

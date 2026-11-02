@@ -209,6 +209,27 @@ def test_modern_import_has_no_packed_storage_or_archive_dependency(tmp_path):
     prepare(root)
 
 
+def test_fresh_direct_import_materializes_paired_components_without_payloads(tmp_path):
+    import json,zlib
+    from xbox_asset_edits import SourceReader
+    from direct_folder import DirectFolder
+    source=tmp_path/'disc';source.mkdir();(source/'default.xex').write_bytes(b'XEX2 fixture')
+    name='fixture.bin';data_hash=zlib.crc32(name.upper().encode())&0xffffffff;meta_hash=0x11112222
+    raw=b'CPU-DATA';packed=b'ZLIB'+struct.pack('>III',len(raw),16+len(zlib.compress(raw)),0)+zlib.compress(raw);body=b'GAP!'+packed+b'GPU!TAIL'
+    head=bytearray(256);struct.pack_into('>II',head,0,0xf0985030,256);struct.pack_into('>I',head,24,1)
+    for field,target in ((32,112),(36,160),(104,120),(112,144)):struct.pack_into('>I',head,field,target-field+1)
+    struct.pack_into('>II',head,120,0x12345678,0x12345678);struct.pack_into('>4I',head,144,4,len(packed),4+len(packed),4);head[160:160+len(name)*2]=name.encode('utf-16-be')
+    archive=bytearray(6144);struct.pack_into('>6I',archive,0,0xaa00b3bf,2048,1,0,2,0);struct.pack_into('>II8s',archive,24,3,0,'0A'.encode('utf-16-be').ljust(8,b'\0'))
+    for i,row in enumerate(sorted(((meta_hash,1,0,len(head)),(data_hash,2,0,len(body))))):struct.pack_into('>4I',archive,40+i*16,*row)
+    archive[2048:2304]=head;archive[4096:4096+len(body)]=body;(source/'0A').write_bytes(archive)
+    root=tmp_path/'game';manifest=import_disc(source,root,False,direct=True)
+    assert not list((root/'assets').rglob('payload.dat')) and not list((root/'assets').rglob('*.stored'))
+    reader=SourceReader(root);assert reader.blocks(dict(bank=meta_hash,record=0))[1]==[raw,b'GPU!']
+    plan=DirectFolder(root).plan();entry=next(e for e in manifest['entries'] if e['hash']==data_hash);offset,size=plan['entries'][data_hash]
+    assert scatter_read(root,offset,size)==b'GAP!CPU-DATAGPU!TAIL'
+    prepare(root);assert not (root/'_cache').exists()
+
+
 def test_iso_reader_is_bounded_and_read_only(tmp_path):
     from xbox_disc_source import ISOReader
     image=tmp_path/'synthetic.iso';image.write_bytes(b'prefixPAYLOADsuffix')

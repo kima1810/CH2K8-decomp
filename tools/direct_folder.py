@@ -51,6 +51,19 @@ class DirectFolder:
     def bank(self,entry):
         folder=contained(self.root,entry['folder']);layout=json.loads((folder/'asset.json').read_text())
         if folder.parent!=self.root/'assets':raise ValueError('Loose bank lies outside assets')
+        committed=True
+        if 'paired_owner' in layout:
+            owner=contained(self.root,layout['paired_owner'])
+            if owner.parent!=self.root/'assets':raise ValueError('Paired owner lies outside assets')
+            committed='paired_resources' in json.loads((owner/'asset.json').read_text())
+        if 'loose_segments' in layout and committed:
+            segments=[];cursor=0
+            for segment in layout['loose_segments']:
+                source=contained(folder,segment['path']);size=source.stat().st_size
+                if segment['offset']!=cursor or size!=segment['size']:raise ValueError('Loose paired component extent changed')
+                segments.append(dict(offset=cursor,size=size,path=source.relative_to(self.root).as_posix()));cursor+=size
+            if cursor!=layout['loose_size']:raise ValueError('Incomplete paired component mapping')
+            return dict(size=cursor,segments=segments)
         if 'blocks' not in layout:
             path=entry['folder']+'/payload.dat';size=contained(self.root,path).stat().st_size
             return dict(size=size,segments=[dict(offset=0,size=size,path=path)] if size else [])

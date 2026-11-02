@@ -103,7 +103,13 @@ class SourceReader:
     def blocks(self,source):
         entry=self.entries[int(source['bank'])];layout=self.layout(entry);index=int(source['record'])
         if not 0<=index<100000:raise ValueError('Resource index exceeds limit')
-        if 'blocks' in layout:
+        if 'paired_resources' in layout:
+            r=next(r for r in layout['paired_resources'] if r['index']==index);kind=r['type'];blocks=[]
+            for c in r['component_files']:
+                data=self.path(c['folder']+'/'+c['path']).read_bytes() if c['path'] else b''
+                if len(data)!=c['size']:raise ValueError('Loose paired component extent changed')
+                blocks.append(data)
+        elif 'blocks' in layout:
             r=next(r for r in layout['records'] if r['index']==index);blocks=[]
             for j,start in enumerate(r['offsets']):
                 if start==0xffffffff:continue
@@ -148,6 +154,8 @@ class SourceReader:
         return kind,blocks
     def records(self,entry):
         layout=self.layout(entry)
+        if 'paired_resources' in layout:return layout['paired_resources']
+        if 'loose_segments' in layout:return []
         if 'blocks' in layout:return layout['records']
         path=self.path(entry['folder']+'/payload.dat')
         with path.open('rb') as stream:
