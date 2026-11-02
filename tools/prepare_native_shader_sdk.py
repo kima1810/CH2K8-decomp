@@ -185,14 +185,39 @@ def patch_output_v4(text):
     return text
 
 
-def patch_header(text):
+def patch_header_v5(text):
     return replace_once(patch_header_v4(text),'kVersion = 0x20261104;','kVersion = 0x20261105;')
 
 
-def patch_pipeline(text):
+def patch_pipeline_v5(text):
     text=patch_pipeline_v4(text)
     site='          depth_flags |= DxbcShaderTranslator::kSysFlag_ROVStencilTest;\n'
     return replace_once(text,site,site+'        if ((!color.alpha_test_enable || color.alpha_func == xenos::CompareFunction::kAlways) &&\n            !color.alpha_to_mask_enable)\n          depth_flags |= DxbcShaderTranslator::kSysFlag_ROVDepthStencilEarlyWrite;\n')
+
+
+def patch_header_v6(text):
+    text=replace_once(patch_header_v5(text),'kVersion = 0x20261105;','kVersion = 0x20261106;')
+    site='      if (ch2k8::PixelStateEnabled(state) && swizzle == dxbc::Src::kXXXX) {'
+    return replace_once(text,site,'      // CH2K8 proven RT0 full writes: only components X/Y belong to RT0.\n      if (ch2k8::FullWrite(state) && index == SystemConstants::Index::kEdramRTKeepMask &&\n          offset == offsetof(SystemConstants, edram_rt_keep_mask) && !(swizzle & 0xAAu))\n        return dxbc::Src::LU(0, 0, 0, 0);\n'+site)
+
+
+def patch_header(text):
+    return replace_once(patch_header_v6(text),'kVersion = 0x20261106;','kVersion = 0x20261107;')
+
+
+def patch_pipeline_v6_initial(text):
+    text=patch_pipeline_v5(text)
+    text=replace_once(text,'REXCVAR_DEFINE_BOOL(ch2k8_native_depth_state,', 'REXCVAR_DEFINE_BOOL(ch2k8_native_full_write, false, "GPU/CH2K8",\n                    "Specialize proven full RT0 color writes")\n    .lifecycle(rex::cvar::Lifecycle::kInitOnly);\n\nREXCVAR_DEFINE_BOOL(ch2k8_native_depth_state,')
+    return replace_once(text,'regs[reg::RB_BLENDCONTROL::rt_register_indices[0]] & 0x1FFF1FFFu);',
+        'regs[reg::RB_BLENDCONTROL::rt_register_indices[0]] & 0x1FFF1FFFu,\n        REXCVAR_GET(ch2k8_native_full_write) &&\n        (draw_util::GetNormalizedColorMask(regs, shader.writes_color_targets()) & 15u) == 15u);')
+
+
+def patch_pipeline(text):
+    text=replace_once(patch_pipeline_v6_initial(text),
+        '(draw_util::GetNormalizedColorMask(regs, shader.writes_color_targets()) & 15u) == 15u);',
+        'ch2k8::FullWriteEligible(uint32_t(rt0.color_format),\n            draw_util::GetNormalizedColorMask(regs, shader.writes_color_targets())));')
+    return text.replace('REXCVAR_DEFINE_BOOL(ch2k8_native_full_write, false,',
+                        'REXCVAR_DEFINE_BOOL(ch2k8_native_full_write, true,')
 
 
 def patch_output(text):
@@ -227,12 +252,23 @@ def prepare_native_shaders(source):
         'src/graphics/pipeline/shader/dxbc_translator_om.cpp':patch_output_v4,
         'src/graphics/pipeline/shader/dxbc_translator.cpp':patch_shader,
     }
+    version5={
+        'include/rex/graphics/pipeline/shader/dxbc_translator.h':patch_header_v5,
+        'src/graphics/d3d12/pipeline_cache.cpp':patch_pipeline_v5,
+        'src/graphics/pipeline/shader/dxbc_translator_om.cpp':patch_output,
+        'src/graphics/pipeline/shader/dxbc_translator.cpp':patch_shader,
+    }
+    initial_v6=dict(version5)
+    initial_v6.update({
+        'include/rex/graphics/pipeline/shader/dxbc_translator.h':patch_header_v6,
+        'src/graphics/d3d12/pipeline_cache.cpp':patch_pipeline_v6_initial,
+    })
     changes = {}
     for relative, patch in functions.items():
         original = subprocess.check_output(['git', '-C', str(source), 'show', 'HEAD:'+relative], text=True)
         expected = patch(original)
         path = source/relative
-        if path.read_text() not in (original, preceding[relative](original), version4[relative](original), expected.replace('REXCVAR_DEFINE_BOOL(ch2k8_native_depth_state, true,', 'REXCVAR_DEFINE_BOOL(ch2k8_native_depth_state, false,'), expected):
+        if path.read_text() not in (original, preceding[relative](original), version4[relative](original), version5[relative](original), initial_v6[relative](original), expected.replace('REXCVAR_DEFINE_BOOL(ch2k8_native_full_write, true,', 'REXCVAR_DEFINE_BOOL(ch2k8_native_full_write, false,'), expected.replace('REXCVAR_DEFINE_BOOL(ch2k8_native_depth_state, true,', 'REXCVAR_DEFINE_BOOL(ch2k8_native_depth_state, false,'), expected):
             raise ValueError('Unreviewed shader SDK changes: '+relative)
         changes[path] = expected
     for path, expected in changes.items():

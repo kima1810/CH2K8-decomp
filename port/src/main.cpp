@@ -190,6 +190,7 @@ protected:
           "ch2k8_native_constants", "ch2k8_native_packets",
           "ch2k8_packet_compare", "ch2k8_gpu_stats",
           "ch2k8_native_pixel_state", "ch2k8_native_depth_state",
+          "ch2k8_native_full_write",
           "d3d12_submit_on_primary_buffer_end",
           "vulkan_submit_on_primary_buffer_end", "vulkan_dynamic_rendering",
           "occlusion_query_enable", "host_present_from_non_ui_thread",

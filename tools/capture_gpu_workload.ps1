@@ -3,6 +3,7 @@
 param(
     [ValidateSet('baseline','optimized')][string]$ShaderState = 'baseline',
     [ValidateSet('default','baseline','optimized')][string]$DepthState = 'default',
+    [ValidateSet('default','baseline','optimized')][string]$FullWrite = 'default',
     [ValidateRange(20,600)][int]$DelaySeconds = 120,
     [ValidateRange(40,900)][int]$DurationSeconds = 200,
     [string]$Executable, [string]$GameData, [string]$RenderDoc,
@@ -37,6 +38,9 @@ if($DepthState -ne 'default') {
 if($Keyboard) {$arguments += '--mnk_mode'}
 if($GpuStats) {$arguments += '--ch2k8_gpu_stats'}
 if($ManualTrigger) {$arguments += "--ch2k8_gpu_capture_trigger=$run/capture.trigger"}
+if ($FullWrite -ne 'default') {
+    $arguments += if ($FullWrite -eq 'optimized') {'--ch2k8_native_full_write'} else {'--no-ch2k8_native_full_write'}
+}
 foreach($argument in $arguments) {if($argument.Contains('"')) {throw 'Arguments must not contain double quotes.'}}
 $configuration=@{arguments=$arguments;run_root=$run;shader_state=$ShaderState;duration_seconds=$DurationSeconds;manual_trigger=[bool]$ManualTrigger;matched_scene=$false}
 if($ValidateOnly) {$configuration | ConvertTo-Json -Depth 4;return}

@@ -68,7 +68,7 @@ def patch_backend_v3(text, backend):
   // Update constant buffers, descriptors and root parameters.''')
 
 
-def patch_backend(text, backend):
+def patch_backend_v5(text, backend):
     if backend=='d3d12' and '// CH2K8 validate specialized pixel state v4' in text:
         return patch_backend_constants(text, backend)
     text=patch_backend_v3(text, backend)
@@ -83,6 +83,15 @@ def patch_backend(text, backend):
     return replace_once(text,
         'ch2k8::PixelFlags(native_state) != (system_constants_.flags & ch2k8::kPixelFlagMask)',
         'ch2k8::PixelFlags(native_state, native_depth) != (system_constants_.flags & native_flag_mask)')
+
+
+def patch_backend(text,backend):
+    text=patch_backend_v5(text,backend)
+    if backend!='d3d12' or '// CH2K8 validate full writes v1' in text:return text
+    text=replace_once(text,'// CH2K8 validate specialized pixel state v4',
+        '// CH2K8 validate specialized pixel state v4\n  // CH2K8 validate full writes v1')
+    return replace_once(text,'(ch2k8::PixelFlags(native_state, native_depth) !=',
+        '((ch2k8::FullWrite(native_state) && (system_constants_.edram_rt_keep_mask[0][0] ||\n       system_constants_.edram_rt_keep_mask[0][1])) ||\n      ch2k8::PixelFlags(native_state, native_depth) !=')
 
 
 def patch_changed_usage(text):
@@ -195,7 +204,9 @@ def prepare_native_gpu(source):
         from prepare_native_sync_sdk import patch_sync, patch_sync_v1
         with_sync = patch_sync(expected, 'common' if '/d3d12/' not in relative else 'd3d12') if '/vulkan/' not in relative else expected
         if current == with_sync or ('/vulkan/' not in relative and current == patch_sync_v1(expected, 'common' if '/d3d12/' not in relative else 'd3d12')): expected = current
-        if current not in (original, previous, preceding, expected):
+        published = patch_sync(patch_backend_v5(original,'d3d12'),'d3d12') if '/d3d12/' in relative else expected
+        if current == published: expected = with_sync
+        if current not in (original, previous, preceding, published, expected):
             raise ValueError('Unreviewed local GPU SDK changes: '+relative)
         paths[path] = expected
     # Validate every insertion before writing any backend source.

@@ -61,7 +61,9 @@ depth-format, alpha-test, RT0 format and supported blend state. This removes
 generic Xbox shader branches while preserving the existing rendering path.
 Exact normalized depth/stencil decisions are also specialized, including the
 existing color/depth alias rule. `--no-ch2k8_native_depth_state` independently
-restores dynamic depth handling. See the
+restores dynamic depth handling. Full RT0 writes also specialize preservation masks,
+with `--no-ch2k8_native_full_write` as an independent fallback. The blend palette
+includes exact source-alpha RGB modes with alpha overwrite or accumulation. See the
 [depth-specialization measurements](../docs/findings/2026-11-01-native-depth-specialization.md).
 
 It is enabled by default; `--no-ch2k8_native_pixel_state` restores the original
@@ -311,3 +313,9 @@ native device capture across presentation boundaries; it sends no game input.
 The script still stops at its deadline. Close the game before timing a replay
 so the GPU is idle. `-DepthState baseline|optimized` selects the independently
 controlled depth specialization in both capture and ordinary benchmark tools.
+
+The [menu write/blend finding](../docs/findings/2026-11-01-menu-write-and-blend.md)
+records an incremental 3% timed-menu GPU reduction for full writes and a 29.76%
+reduction for the selected asymmetric overlay draw, with identical replay output.
+These are GPU-cost measurements; severe menu lag and whole-game FPS remain open.
+Both benchmark/capture scripts accept `-FullWrite baseline|optimized` for controls.

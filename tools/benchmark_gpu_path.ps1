@@ -20,6 +20,7 @@ param(
     [ValidateSet('default','baseline','optimized','compare')][string]$RamStore = 'default',
     [ValidateSet('default','baseline','optimized')][string]$PixelState = 'default',
     [ValidateSet('default','baseline','optimized')][string]$DepthState = 'default',
+    [ValidateSet('default','baseline','optimized')][string]$FullWrite = 'default',
     [ValidateSet('default','baseline','optimized')][string]$GuardedVectorStore = 'default',
     [switch]$ValidateOnly
 )
@@ -73,6 +74,10 @@ if ($PixelState -ne 'default') {
 }
 if ($NativePackets -eq 'baseline') { $arguments += '--no-ch2k8_native_packets' }
 elseif ($NativePackets -eq 'optimized') { $arguments += '--ch2k8_native_packets' }
+if ($FullWrite -ne 'default') {
+    if ($backend -ne 'd3d12') {throw 'FullWrite specialization requires D3D12.'}
+    $arguments += if ($FullWrite -eq 'optimized') {'--ch2k8_native_full_write'} else {'--no-ch2k8_native_full_write'}
+}
 foreach ($argument in $arguments) {
     if ($argument.Contains('"')) { throw 'Paths must not contain double quotes.' }
 }

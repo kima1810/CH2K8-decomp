@@ -24,7 +24,7 @@ using namespace rex::graphics::ch2k8;
 int main() {
  std::set<unsigned> keys,full_keys;
  unsigned checks=0;
- for(unsigned samples=0;samples<4;++samples) for(unsigned flags=0;flags<16;++flags) {
+ for(unsigned samples=0;samples<3;++samples) for(unsigned flags=0;flags<16;++flags) {
   auto state=PackPixelState(samples,flags<<6);
   if(state>=65536 || !keys.insert(state).second || !PixelStateEnabled(state)) return 1;
   if(PixelFlags(state)!=(flags<<6)) return 2;
@@ -38,15 +38,20 @@ int main() {
    if(CanFoldSamples(state,swizzle) != ((swizzle&0xAA)==0)) return 6;
   for(unsigned format=0;format<16;++format) for(unsigned index=0;index<32;++index) {
    unsigned blend=0xFFFFFFFFu;
-   if(index) {auto h=kBlendHalves[index-1];blend=h|(h<<16);}
+   if(index) blend=kBlendControls[index-1];
    auto full=PackPixelState(samples,flags<<6,format,blend);
    if(ColorFormat(full)!=format || HasBlend(full)!=bool(index) ||
       (index && BlendControl(full)!=blend) ||
       PixelFlags(full)!=(flags<<6) || !PixelStateEnabled(full)) return 7;
-   if(!full_keys.insert(full).second) return 8;
+   if(!full_keys.insert(full).second || FullWrite(full)) return 8;
+   auto full_write=PackPixelState(samples,flags<<6,format,blend,true);
+   if(!FullWrite(full_write) || !full_keys.insert(full_write).second ||
+      PixelFlags(full_write)!=PixelFlags(full) || ColorFormat(full_write)!=ColorFormat(full) ||
+      BlendControl(full_write)!=BlendControl(full) || SampleLog2(full_write,0)!=SampleLog2(full,0)) return 16;
   }
  }
- if(full_keys.size()!=32768) return 9;
+ if(full_keys.size()!=49152) return 9;
+ if(PackPixelState(3,0)!=0 || PixelStateEnabled(0) || FullWrite(0x8000)) return 17;
  unsigned interpolation_checks=0;
  for(unsigned mask=0;mask<65536;++mask) for(unsigned pattern=0;pattern<8;++pattern) {
   const unsigned choices[]={0u,65535u,0xAAAAu,0x5555u,0xFF00u,0x00FFu,mask*1664525u,mask*1013904223u};
@@ -66,7 +71,7 @@ int main() {
  if(!CanFoldFlags(PackPixelState(2,0),1u<<20,PackDepthState(0))) return 13;
  if(!CanFoldFlags(PackPixelState(2,0),63u<<14,PackDepthState(0))) return 14;
  if(CanFoldFlags(PackPixelState(2,0),63u<<14,0)) return 15;
- printf("%u exact state/mask comparisons; 32768 unique full keys\n",checks);
+ printf("%u exact state/mask comparisons; 49152 unique full keys\n",checks);
  printf("%u interpolation round-trips with 128 depth combinations\n",interpolation_checks);
 }
 ''')
@@ -75,7 +80,7 @@ int main() {
     assert build.returncode == 0, build.stderr
     result = subprocess.run([str(exe)],capture_output=True,text=True)
     assert result.returncode == 0, result.stdout+result.stderr
-    assert '1024 exact state/mask comparisons' in result.stdout
+    assert '768 exact state/mask comparisons' in result.stdout
     assert '524288 interpolation round-trips' in result.stdout
 
 
@@ -147,3 +152,33 @@ def test_paired_counter_summary_requires_matching_warmed_trials(tmp_path):
     path.write_text('\n'.join(rows[:-1])+'\n')
     with pytest.raises(ValueError,match='Mismatched'):
         summarize(path,10)
+
+
+def test_full_write_contract_against_original_format_masks(tmp_path):
+    compiler=shutil.which('clang++')
+    sdk=ROOT/'work/third_party/rexglue-vulkan'
+    if not compiler or not sdk.exists():pytest.skip('Requires compiler and pinned SDK')
+    # Execute the actual upstream format-mask implementation, not a mirrored model.
+    text=(sdk/'include/rex/graphics/xenos.h').read_text()
+    start=text.index('enum class ColorRenderTargetFormat :')
+    enum=text[start:text.index('};',start)+2]
+    text=(sdk/'src/graphics/pipeline/render_target/cache.cpp').read_text()
+    start=text.index('void RenderTargetCache::GetPSIColorFormatInfo(')
+    function=text[start:text.index('\n}\n',start)+3].replace('RenderTargetCache::GetPSIColorFormatInfo','OriginalKeepMask')
+    source=tmp_path/'contract.cpp'
+    source.write_text('#include <cmath>\n#include <cstdint>\n#include "native_pixel_state.h"\n#define assert_unhandled_case(...) ((void)0)\nnamespace xenos {\n'+enum+'\n}\n'+function+r'''
+int main() {
+  using namespace rex::graphics::ch2k8;
+  for(unsigned format=0;format<16;++format) for(unsigned mask=0;mask<256;++mask) {
+    float clamps[4];unsigned low,high;
+    OriginalKeepMask(xenos::ColorRenderTargetFormat(format),mask&15,
+        clamps[0],clamps[1],clamps[2],clamps[3],low,high);
+    if(FullWriteEligible(format,mask) && (low || high)) return 1;
+    if((format==8 || format==9 || format==11 || format==13) && FullWriteEligible(format,mask)) return 2;
+  }
+}
+''')
+    exe=tmp_path/'contract.exe'
+    result=subprocess.run([compiler,'-std=c++17','-O2','-I',str(ROOT/'port/sdk_patches'),str(source),'-o',str(exe)],text=True,capture_output=True)
+    assert result.returncode==0,result.stderr
+    assert subprocess.run([str(exe)]).returncode==0
