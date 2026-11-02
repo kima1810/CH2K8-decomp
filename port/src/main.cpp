@@ -15,6 +15,7 @@
 
 #include <chrono>
 #include <cstdlib>
+#include <filesystem>
 #include <memory>
 #include <thread>
 
@@ -74,6 +75,8 @@ REXCVAR_DEFINE_STRING(
 REXCVAR_DEFINE_STRING(
     ch2k8_gpu_capture, "", "CH2K8/Diagnostics",
     "Opt-in RenderDoc capture filename prefix (requires injected RenderDoc)");
+REXCVAR_DEFINE_STRING(ch2k8_gpu_capture_trigger, "", "CH2K8/Diagnostics",
+    "Optional filename: begin the device capture when this file exists");
 REXCVAR_DEFINE_INT32(
     ch2k8_gpu_capture_delay, 120, "CH2K8/Diagnostics",
     "Seconds after runtime setup before an automated GPU capture")
@@ -186,6 +189,7 @@ protected:
           "readback_memexport_fast", "d3d12_bindless",
           "ch2k8_native_constants", "ch2k8_native_packets",
           "ch2k8_packet_compare", "ch2k8_gpu_stats",
+          "ch2k8_native_pixel_state", "ch2k8_native_depth_state",
           "d3d12_submit_on_primary_buffer_end",
           "vulkan_submit_on_primary_buffer_end", "vulkan_dynamic_rendering",
           "occlusion_query_enable", "host_present_from_non_ui_thread",
@@ -227,12 +231,18 @@ protected:
         return;
       }
       const int delay = REXCVAR_GET(ch2k8_gpu_capture_delay);
+      const auto trigger = REXCVAR_GET(ch2k8_gpu_capture_trigger);
       capture_thread_ =
-          std::jthread([capture, device, prefix, delay](std::stop_token stop) {
+          std::jthread([capture, device, prefix, delay, trigger](std::stop_token stop) {
             using namespace std::chrono_literals;
-            for (int tick = 0; tick < delay * 10; ++tick) {
+            for (int tick = 0; trigger.empty() && tick < delay * 10; ++tick) {
               if (stop.stop_requested())
                 return;
+              std::this_thread::sleep_for(100ms);
+            }
+            while (!trigger.empty() && !stop.stop_requested()) {
+              std::error_code error;
+              if (std::filesystem::is_regular_file(trigger, error)) break;
               std::this_thread::sleep_for(100ms);
             }
             if (stop.stop_requested() || capture->IsFrameCapturing())
@@ -246,7 +256,7 @@ protected:
             }
             // Capture off-screen guest submissions across host presentation
             // calls.
-            for (int tick = 0; tick < 8 && !stop.stop_requested(); ++tick)
+            for (int tick = 0; tick < (trigger.empty() ? 8 : 50) && !stop.stop_requested(); ++tick)
               std::this_thread::sleep_for(100ms);
             const auto success = capture->EndFrameCapture(device, nullptr);
             REXLOG_INFO("CH2K8 GPU capture: completed success={}", success);

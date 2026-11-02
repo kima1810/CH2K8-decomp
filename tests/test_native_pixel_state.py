@@ -7,7 +7,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT/'tools'))
-from prepare_native_shader_sdk import patch_header, patch_pipeline, patch_output, prepare_native_shaders
+from prepare_native_shader_sdk import patch_header, patch_pipeline, patch_output, patch_shader, prepare_native_shaders, patch_header_v3, patch_pipeline_v3, patch_output_v3
 from summarize_shader_comparison import summarize
 
 
@@ -47,7 +47,27 @@ int main() {
   }
  }
  if(full_keys.size()!=32768) return 9;
+ unsigned interpolation_checks=0;
+ for(unsigned mask=0;mask<65536;++mask) for(unsigned pattern=0;pattern<8;++pattern) {
+  const unsigned choices[]={0u,65535u,0xAAAAu,0x5555u,0xFF00u,0x00FFu,mask*1664525u,mask*1013904223u};
+  auto centroid=choices[pattern]&mask&65535u;
+  auto packed=PackInterpolators(mask,centroid);
+  if(packed>43046720u || InterpolatorMask(packed)!=mask ||
+     InterpolatorMask(packed,true)!=centroid) return 10;
+  for(unsigned raw=0;raw<128;++raw) {
+   auto depth=PackDepthState(raw<<14);
+   const bool encoded=raw==0 || ((raw&1u) && (raw>>1)<62u);
+   if(depth>=64 || bool(depth)!=encoded || (depth && DepthFlags(depth)!=(raw<<14))) return 11;
+   auto combined=packed|(depth<<26);
+   if((combined&0x3FFFFFFu)!=packed || (combined>>26)!=depth) return 12;
+  }
+  ++interpolation_checks;
+ }
+ if(!CanFoldFlags(PackPixelState(2,0),1u<<20,PackDepthState(0))) return 13;
+ if(!CanFoldFlags(PackPixelState(2,0),63u<<14,PackDepthState(0))) return 14;
+ if(CanFoldFlags(PackPixelState(2,0),63u<<14,0)) return 15;
  printf("%u exact state/mask comparisons; 32768 unique full keys\n",checks);
+ printf("%u interpolation round-trips with 128 depth combinations\n",interpolation_checks);
 }
 ''')
     exe = tmp_path/'state.exe'
@@ -56,6 +76,7 @@ int main() {
     result = subprocess.run([str(exe)],capture_output=True,text=True)
     assert result.returncode == 0, result.stdout+result.stderr
     assert '1024 exact state/mask comparisons' in result.stdout
+    assert '524288 interpolation round-trips' in result.stdout
 
 
 def test_pinned_shader_patches_and_atomic_rejection(tmp_path, monkeypatch):
@@ -66,6 +87,7 @@ def test_pinned_shader_patches_and_atomic_rejection(tmp_path, monkeypatch):
         'include/rex/graphics/pipeline/shader/dxbc_translator.h': patch_header,
         'src/graphics/d3d12/pipeline_cache.cpp': patch_pipeline,
         'src/graphics/pipeline/shader/dxbc_translator_om.cpp': patch_output,
+        'src/graphics/pipeline/shader/dxbc_translator.cpp': patch_shader,
     }
     originals = {}
     for name, patch in functions.items():
@@ -76,6 +98,10 @@ def test_pinned_shader_patches_and_atomic_rejection(tmp_path, monkeypatch):
         path.write_text(original)
         assert patch(original) != original
     monkeypatch.setattr(subprocess,'check_output',lambda args,**kw: originals[args[-1].removeprefix('HEAD:')])
+    # Upgrade the exact previously published three-file shader patch atomically.
+    previous = dict(zip(functions, (patch_header_v3, patch_pipeline_v3, patch_output_v3, lambda text:text)))
+    for name, patch in previous.items():
+        (tmp_path/name).write_text(patch(originals[name]))
     prepare_native_shaders(tmp_path)
     before = {name:(tmp_path/name).read_bytes() for name in functions}
     prepare_native_shaders(tmp_path)

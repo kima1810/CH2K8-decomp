@@ -1,5 +1,9 @@
 # Findings index
 
+- [2026-11-01 Pause-menu GPU backlog](2026-11-01-pause-menu-gpu-backlog.md): user-opened 2K Nav capture and native wait attribution identify 115.2 ms median submissions, 72% graphics-thread fence waits and 96-99% GPU activity; distinguishes abnormal menu backlog from normal startup register pacing. Exact early-depth specialization preserves full EDRAM and reduces timed menu GPU work 7.25% in the same recording.
+
+- [2026-11-01 Native depth specialization](2026-11-01-native-depth-specialization.md): exact ROV depth/stencil key, lossless interpolation packing and runtime validation; identical replay output with a further 31.69% target-draw and 7.76% median timed-action reduction against the previous native shader.
+
 - [2026-11-01 Guarded vector output](2026-11-01-guarded-vector-output.md): two checked stack reloads unlock native stores in the third hot vector routine; paired work cost falls 17.35%, with 384 complete routine comparisons including forced fallbacks. D3D12 ROV and Vulkan FSI render correctly; an isolated same-build control records 34.8 ms enabled versus 50.5 ms disabled, with different demo scenes.
 
 - [2026-11-01 Native pixel specialization](2026-11-01-native-pixel-specialization.md): exact draw-state variants remove generic ROV format/blend work; same-capture replay verifies byte-identical EDRAM and measures 27% less time for the leading draw, 8.8% less summed GPU work when replacing that one shader. Enabled for D3D12 ROV; same-build normal submission cadence remains about 40.5 ms with either setting.

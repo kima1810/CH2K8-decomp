@@ -41,7 +41,7 @@ def patch_backend_constants(text, backend):
     return patch_changed_usage(text)
 
 
-def patch_backend(text, backend):
+def patch_backend_v3(text, backend):
     text = patch_backend_constants(text, backend)
     if backend != 'd3d12' or '// CH2K8 validate specialized pixel state v3' in text:
         return text
@@ -66,6 +66,23 @@ def patch_backend(text, backend):
   }
 
   // Update constant buffers, descriptors and root parameters.''')
+
+
+def patch_backend(text, backend):
+    if backend=='d3d12' and '// CH2K8 validate specialized pixel state v4' in text:
+        return patch_backend_constants(text, backend)
+    text=patch_backend_v3(text, backend)
+    if backend!='d3d12':return text
+    if '// CH2K8 validate specialized pixel state v4' in text:return text
+    text=replace_once(text,'// CH2K8 validate specialized pixel state v3',
+        '// CH2K8 validate specialized pixel state v4')
+    text=replace_once(text,'  const auto native_state = pixel_shader_modification.pixel.native_pixel_state;',
+        '''  const auto native_state = pixel_shader_modification.pixel.native_pixel_state;
+  const auto native_depth = pixel_shader_modification.pixel.native_depth_state;
+  const auto native_flag_mask = ch2k8::kPixelFlagMask | ch2k8::DepthFlagMask(native_depth);''')
+    return replace_once(text,
+        'ch2k8::PixelFlags(native_state) != (system_constants_.flags & ch2k8::kPixelFlagMask)',
+        'ch2k8::PixelFlags(native_state, native_depth) != (system_constants_.flags & native_flag_mask)')
 
 
 def patch_changed_usage(text):
@@ -174,7 +191,11 @@ def prepare_native_gpu(source):
             expected = patch_common(original)
         current = path.read_text(encoding='utf-8')
         previous = patch_backend_constants(original, 'd3d12') if '/d3d12/' in relative else expected
-        if current not in (original, previous, expected):
+        preceding = patch_backend_v3(original, 'd3d12') if '/d3d12/' in relative else expected
+        from prepare_native_sync_sdk import patch_sync, patch_sync_v1
+        with_sync = patch_sync(expected, 'common' if '/d3d12/' not in relative else 'd3d12') if '/vulkan/' not in relative else expected
+        if current == with_sync or ('/vulkan/' not in relative and current == patch_sync_v1(expected, 'common' if '/d3d12/' not in relative else 'd3d12')): expected = current
+        if current not in (original, previous, preceding, expected):
             raise ValueError('Unreviewed local GPU SDK changes: '+relative)
         paths[path] = expected
     # Validate every insertion before writing any backend source.

@@ -104,7 +104,10 @@ def test_sdk_patch_is_repeatable_and_rejects_unfamiliar_sources(backend):
     # Recover the pinned input using Git, not a hand-maintained test facsimile.
     original = subprocess.check_output(['git', '-C', str(source.parents[3]), 'show',
         f'HEAD:src/graphics/{backend}/command_processor.cpp'], text=True)
-    assert patch_backend(original, backend) == patched
+    from prepare_native_sync_sdk import patch_sync
+    expected = patch_backend(original, backend)
+    if '// CH2K8 sync attribution v1' in patched: expected = patch_sync(expected, backend)
+    assert expected == patched
     with pytest.raises(ValueError, match='Unrecognized'):
         patch_backend(original.replace('uint32_t index, uint32_t value', 'uint32_t changed, uint32_t value'), backend)
 

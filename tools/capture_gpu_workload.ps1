@@ -2,9 +2,13 @@
 [CmdletBinding()]
 param(
     [ValidateSet('baseline','optimized')][string]$ShaderState = 'baseline',
+    [ValidateSet('default','baseline','optimized')][string]$DepthState = 'default',
     [ValidateRange(20,600)][int]$DelaySeconds = 120,
     [ValidateRange(40,900)][int]$DurationSeconds = 200,
     [string]$Executable, [string]$GameData, [string]$RenderDoc,
+    [switch]$Keyboard,
+    [switch]$GpuStats,
+    [switch]$ManualTrigger,
     [switch]$ValidateOnly
 )
 $ErrorActionPreference = 'Stop'
@@ -27,8 +31,14 @@ $arguments=@('capture','-d',(Split-Path $Executable),$Executable,
     "--ch2k8_output_capture=$run/output",'--ch2k8_output_capture_count=1',
     "--ch2k8_output_capture_delay=$($DelaySeconds+10)")
 $arguments += if($ShaderState -eq 'optimized') {'--ch2k8_native_pixel_state'} else {'--no-ch2k8_native_pixel_state'}
+if($DepthState -ne 'default') {
+    $arguments += if($DepthState -eq 'optimized') {'--ch2k8_native_depth_state'} else {'--no-ch2k8_native_depth_state'}
+}
+if($Keyboard) {$arguments += '--mnk_mode'}
+if($GpuStats) {$arguments += '--ch2k8_gpu_stats'}
+if($ManualTrigger) {$arguments += "--ch2k8_gpu_capture_trigger=$run/capture.trigger"}
 foreach($argument in $arguments) {if($argument.Contains('"')) {throw 'Arguments must not contain double quotes.'}}
-$configuration=@{arguments=$arguments;run_root=$run;shader_state=$ShaderState;duration_seconds=$DurationSeconds;matched_scene=$false}
+$configuration=@{arguments=$arguments;run_root=$run;shader_state=$ShaderState;duration_seconds=$DurationSeconds;manual_trigger=[bool]$ManualTrigger;matched_scene=$false}
 if($ValidateOnly) {$configuration | ConvertTo-Json -Depth 4;return}
 if(Get-Process ch2k8 -ErrorAction SilentlyContinue) {throw 'CH2K8 is already running.'}
 New-Item -ItemType Directory -Path $run | Out-Null

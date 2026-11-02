@@ -22,8 +22,9 @@ void actions(const rdcarray<ActionDescription> &list, std::ofstream &out,
   }
 }
 int main(int argc, char **argv) {
-  if (argc != 3) {
-    puts("Usage: renderdoc_replay <capture.rdc> <output-prefix>");
+  const bool diagnostics=argc==4 && std::string(argv[3])=="--diagnostics-only";
+  if (argc != 3 && !diagnostics) {
+    puts("Usage: renderdoc_replay <capture.rdc> <output-prefix> [--diagnostics-only]");
     return 1;
   }
   RENDERDOC_InitialiseReplay(GlobalEnvironment{}, {});
@@ -41,6 +42,25 @@ int main(int argc, char **argv) {
     return 3;
   }
   auto controller = replay.second;
+  auto log_file=reinterpret_cast<const char* (__cdecl*)()>(
+      GetProcAddress(GetModuleHandleW(L"renderdoc.dll"),"RENDERDOC_GetLogFile"));
+  if(log_file) printf("RenderDoc log: %s\n",log_file());
+  auto save_log=[&]() {
+    auto contents=reinterpret_cast<void (__cdecl*)(uint64_t,rdcstr&)>(
+        GetProcAddress(GetModuleHandleW(L"renderdoc.dll"),"RENDERDOC_GetLogFileContents"));
+    if(contents) {
+      rdcstr data;contents(0,data);
+      std::ofstream out(std::string(argv[2])+"-renderdoc.log");out<<data.c_str();
+    }
+  };
+  if(diagnostics) {
+    for(auto id:controller->EnumerateCounters()) {
+      const auto d=controller->DescribeCounter(id);
+      printf("Counter %u %s unit=%u type=%u bytes=%u\n",unsigned(id),d.name.c_str(),
+             unsigned(d.unit),unsigned(d.resultType),d.resultByteWidth);
+    }
+    save_log();controller->Shutdown();file->Shutdown();RENDERDOC_ShutdownReplay();return 0;
+  }
   std::ofstream events(std::string(argv[2]) + "-events.tsv");
   events << "event\tindices\tinstances\tname\n";
   actions(controller->GetRootActions(), events,
@@ -72,6 +92,7 @@ int main(int argc, char **argv) {
          unsigned(desc.unit), unsigned(CounterUnit::Seconds));
   fflush(stdout);
   auto counters = controller->FetchCounters({counter});
+  save_log();
   std::ofstream timings(std::string(argv[2]) + "-timings.tsv");
   timings << "event\tms\n";
   std::vector<std::pair<double, unsigned>> ranked;

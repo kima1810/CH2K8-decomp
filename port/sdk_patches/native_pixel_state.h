@@ -6,6 +6,36 @@ namespace rex::graphics::ch2k8 {
 // [CONFIRMED] Exact per-draw values, carried in the shader translation key.
 // No shader hash, observed scene, or assumed game-wide state is used.
 constexpr uint32_t kPixelFlagMask = 0xFu << 6;
+// Three states per interpolator (off, center, centroid) need 26 rather than
+// 32 bits. The recovered six key bits encode exact depth/stencil decisions.
+constexpr uint32_t PackInterpolators(uint32_t mask, uint32_t centroid) {
+  uint32_t value=0,place=1;
+  for(unsigned i=0;i<16;++i,place*=3)
+    if(mask&(1u<<i)) value+=place*((centroid&(1u<<i))?2u:1u);
+  return value;
+}
+constexpr uint32_t InterpolatorMask(uint32_t value, bool centroid_only=false) {
+  uint32_t mask=0;
+  for(unsigned i=0;i<16;++i,value/=3) {
+    const auto digit=value%3;
+    if(centroid_only ? digit==2 : digit!=0) mask|=1u<<i;
+  }
+  return mask;
+}
+// Zero is dynamic; one is fully disabled. Enabled depth has five decision
+// bits plus the early-write hint. Reserve two uncommon enabled combinations
+// for dynamic fallback so all encoded values fit the existing six key bits.
+constexpr uint32_t PackDepthState(uint32_t flags) {
+  const auto raw=(flags>>14)&127u;
+  if(!raw) return 1;
+  if(!(raw&1u)) return 0;
+  const auto decisions=raw>>1;
+  return decisions<62u ? decisions+2u : 0u;
+}
+constexpr uint32_t DepthFlagMask(uint32_t depth) {return depth ? 127u<<14 : 0u;}
+constexpr uint32_t DepthFlags(uint32_t depth) {
+  return depth>1 ? (((depth-2u)<<1)|1u)<<14 : 0u;
+}
 constexpr uint32_t BlendHalf(unsigned source, unsigned op, unsigned destination) {
   return source | (op << 5) | (destination << 8);
 }
@@ -34,7 +64,9 @@ constexpr uint32_t PackPixelState(uint32_t samples, uint32_t flags,
          ((format & 15u) << 6) | (BlendIndex(blend) << 10);
 }
 constexpr bool PixelStateEnabled(uint32_t state) { return (state & 0x8000u) != 0; }
-constexpr uint32_t PixelFlags(uint32_t state) { return ((state >> 2) & 15u) << 6; }
+constexpr uint32_t PixelFlags(uint32_t state, uint32_t depth=0) {
+  return (((state >> 2) & 15u) << 6) | DepthFlags(depth);
+}
 constexpr uint32_t ColorFormat(uint32_t state) { return (state >> 6) & 15u; }
 constexpr bool HasBlend(uint32_t state) { return ((state >> 10) & 31u) != 0; }
 constexpr uint32_t BlendControl(uint32_t state) {
@@ -47,8 +79,8 @@ constexpr uint32_t SampleLog2(uint32_t state, unsigned component) {
   const auto samples = state & 3u;
   return component ? unsigned(samples >= 1) : unsigned(samples >= 2);
 }
-constexpr bool CanFoldFlags(uint32_t state, uint32_t mask) {
-  return PixelStateEnabled(state) && !(mask & ~kPixelFlagMask);
+constexpr bool CanFoldFlags(uint32_t state, uint32_t mask, uint32_t depth=0) {
+  return PixelStateEnabled(state) && !(mask & ~(kPixelFlagMask|DepthFlagMask(depth)));
 }
 constexpr bool CanFoldSamples(uint32_t state, uint32_t swizzle) {
   return PixelStateEnabled(state) && !(swizzle & 0xAAu);

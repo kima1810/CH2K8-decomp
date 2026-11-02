@@ -6,7 +6,7 @@ from prepare_native_gpu_sdk import replace_once
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def patch_header(text):
+def patch_header_v3(text):
     text = replace_once(text, '#pragma once', '#pragma once\n#include <rex/graphics/native_pixel_state.h>\n#include <rex/graphics/pipeline/render_target/cache.h>')
     text = replace_once(text, 'kVersion = 0x20260226;', 'kVersion = 0x20261103;')
     text = replace_once(text, '      DepthStencilMode depth_stencil_mode : 2;',
@@ -51,7 +51,7 @@ def patch_header(text):
     return text
 
 
-def patch_pipeline(text):
+def patch_pipeline_v3(text):
     text = replace_once(text, 'REXCVAR_DEFINE_BOOL(d3d12_dxbc_disasm,', '''REXCVAR_DEFINE_BOOL(ch2k8_native_pixel_state, true, "GPU/CH2K8",
                     "Specialize exact ROV sample, format, alpha and common blend state")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
@@ -82,7 +82,7 @@ REXCVAR_DEFINE_BOOL(d3d12_dxbc_disasm,''')
     return text[:start]+part+text[end:]
 
 
-def patch_output(text):
+def patch_output_v3(text):
     # Each replaced operand is immediately masked to precisely these bits.
     text = replace_once(text, 'LoadFlagsSystemConstant(),\n               dxbc::Src::LU(kSysFlag_ConvertColor0ToGamma << i)',
                         'LoadMaskedFlagsSystemConstant(kSysFlag_ConvertColor0ToGamma << i),\n               dxbc::Src::LU(kSysFlag_ConvertColor0ToGamma << i)')
@@ -95,18 +95,144 @@ def patch_output(text):
     return text
 
 
+def patch_header_v4(text):
+    text=patch_header_v3(text)
+    text=replace_once(text,'kVersion = 0x20261103;','kVersion = 0x20261104;')
+    text=replace_once(text,
+        '      uint32_t interpolator_mask : xenos::kMaxInterpolators;\n      uint32_t interpolators_centroid : xenos::kMaxInterpolators;',
+        '      uint32_t interpolation_modes : 26;\n      uint32_t native_depth_state : 6;')
+    text=replace_once(text,'    explicit Modification(uint64_t modification_value = 0)', '''    static_assert(xenos::kMaxInterpolators == 16);
+    void SetPixelInterpolators(uint32_t mask, uint32_t centroid) {
+      pixel.interpolation_modes = ch2k8::PackInterpolators(mask, centroid);
+    }
+    uint32_t GetPixelInterpolatorMask() const {
+      return ch2k8::InterpolatorMask(pixel.interpolation_modes);
+    }
+    uint32_t GetPixelCentroidMask() const {
+      return ch2k8::InterpolatorMask(pixel.interpolation_modes, true);
+    }
+    explicit Modification(uint64_t modification_value = 0)''')
+    text=replace_once(text,'modification.pixel.interpolator_mask;', 'modification.GetPixelInterpolatorMask();')
+    text=replace_once(text,'''      const auto state = GetDxbcShaderModification().pixel.native_pixel_state;
+      if (ch2k8::CanFoldFlags(state, mask)) return dxbc::Src::LU(ch2k8::PixelFlags(state));''',
+        '''      const auto modification = GetDxbcShaderModification();
+      const auto state = modification.pixel.native_pixel_state;
+      const auto depth = modification.pixel.native_depth_state;
+      if (ch2k8::CanFoldFlags(state, mask, depth))
+        return dxbc::Src::LU(ch2k8::PixelFlags(state, depth));''')
+    return text
+
+
+def patch_pipeline_v4(text):
+    text=patch_pipeline_v3(text)
+    text=replace_once(text,'REXCVAR_DEFINE_BOOL(ch2k8_native_pixel_state,', '''REXCVAR_DEFINE_BOOL(ch2k8_native_depth_state, true, "GPU/CH2K8",
+                    "Specialize exact ROV depth and stencil decisions")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+
+REXCVAR_DEFINE_BOOL(ch2k8_native_pixel_state,''')
+    text=replace_once(text,'''  modification.pixel.interpolator_mask = interpolator_mask;
+  modification.pixel.interpolators_centroid =
+      interpolator_mask & ~xenos::GetInterpolatorSamplingPattern(''',
+        '''  const uint32_t centroid = interpolator_mask & ~xenos::GetInterpolatorSamplingPattern(''')
+    site='''                              regs.Get<reg::SQ_INTERPOLATOR_CNTL>().sampling_pattern);
+'''
+    text=replace_once(text,site,site+'  modification.SetPixelInterpolators(interpolator_mask, centroid);\n')
+    text=replace_once(text,'pixel_shader_modification.pixel.interpolator_mask);',
+        'pixel_shader_modification.GetPixelInterpolatorMask());')
+    site='''        regs[reg::RB_BLENDCONTROL::rt_register_indices[0]] & 0x1FFF1FFFu);
+'''
+    text=replace_once(text,site,site+'''    // CH2K8 exact depth specialization v1. Match the original alias rule.
+    if (REXCVAR_GET(ch2k8_native_depth_state)) {
+      const auto depth = regs.Get<reg::RB_DEPTH_INFO>();
+      bool enabled = normalized_depth_control.z_enable || normalized_depth_control.stencil_enable;
+      if (enabled) {
+        const auto mask = draw_util::GetNormalizedColorMask(regs, shader.writes_color_targets());
+        for (uint32_t i = 0; i < 4; ++i) {
+          const auto color = regs.Get<reg::RB_COLOR_INFO>(reg::RB_COLOR_INFO::rt_register_indices[i]);
+          if (depth.depth_base != color.color_base) continue;
+          float clamp[4]; uint32_t keep_low, keep_high;
+          RenderTargetCache::GetPSIColorFormatInfo(color.color_format, (mask >> (4*i)) & 15u,
+              clamp[0], clamp[1], clamp[2], clamp[3], keep_low, keep_high);
+          if (keep_low != UINT32_MAX || keep_high != UINT32_MAX) { enabled = false; break; }
+        }
+      }
+      uint32_t depth_flags = 0;
+      if (enabled) {
+        depth_flags = DxbcShaderTranslator::kSysFlag_ROVDepthStencil;
+        depth_flags |= uint32_t(normalized_depth_control.z_enable ? normalized_depth_control.zfunc :
+            xenos::CompareFunction::kAlways) << DxbcShaderTranslator::kSysFlag_ROVDepthPassIfLess_Shift;
+        if (normalized_depth_control.z_enable && normalized_depth_control.z_write_enable)
+          depth_flags |= DxbcShaderTranslator::kSysFlag_ROVDepthWrite;
+        if (normalized_depth_control.stencil_enable)
+          depth_flags |= DxbcShaderTranslator::kSysFlag_ROVStencilTest;
+      }
+      modification.pixel.native_depth_state = ch2k8::PackDepthState(depth_flags);
+    }
+''')
+    return text
+
+
+def patch_output_v4(text):
+    text=patch_output_v3(text)
+    for flag in ('ROVDepthStencil','ROVDepthWrite','ROVStencilTest'):
+        import re
+        pattern=r'LoadFlagsSystemConstant\(\)(,\s*dxbc::Src::LU\(kSysFlag_'+flag+r'\))'
+        text,count=re.subn(pattern,r'LoadMaskedFlagsSystemConstant(kSysFlag_'+flag+r')\1',text)
+        if count!=1:raise ValueError('Unrecognized depth flag site: '+flag)
+    text=replace_once(text,'sample_temp_z_dest, sample_temp_z_src, LoadFlagsSystemConstant());',
+        '''sample_temp_z_dest, sample_temp_z_src, LoadMaskedFlagsSystemConstant(
+        kSysFlag_ROVDepthPassIfLess | kSysFlag_ROVDepthPassIfEqual | kSysFlag_ROVDepthPassIfGreater));''')
+    return text
+
+
+def patch_header(text):
+    return replace_once(patch_header_v4(text),'kVersion = 0x20261104;','kVersion = 0x20261105;')
+
+
+def patch_pipeline(text):
+    text=patch_pipeline_v4(text)
+    site='          depth_flags |= DxbcShaderTranslator::kSysFlag_ROVStencilTest;\n'
+    return replace_once(text,site,site+'        if ((!color.alpha_test_enable || color.alpha_func == xenos::CompareFunction::kAlways) &&\n            !color.alpha_to_mask_enable)\n          depth_flags |= DxbcShaderTranslator::kSysFlag_ROVDepthStencilEarlyWrite;\n')
+
+
+def patch_output(text):
+    return replace_once(patch_output_v4(text),
+        'a_.OpAnd(sample_temp_x_dest, LoadFlagsSystemConstant(),\n                   dxbc::Src::LU(kSysFlag_ROVDepthStencilEarlyWrite));',
+        'a_.OpAnd(sample_temp_x_dest, LoadMaskedFlagsSystemConstant(kSysFlag_ROVDepthStencilEarlyWrite),\n                   dxbc::Src::LU(kSysFlag_ROVDepthStencilEarlyWrite));')
+
+
+def patch_shader(text):
+    text=replace_once(text,'shader_modification.pixel.interpolator_mask = (UINT32_C(1) << xenos::kMaxInterpolators) - 1;',
+        'shader_modification.SetPixelInterpolators((UINT32_C(1) << xenos::kMaxInterpolators) - 1, 0);')
+    return replace_once(text,'shader_modification.pixel.interpolators_centroid &',
+        'shader_modification.GetPixelCentroidMask() &')
+
+
 def prepare_native_shaders(source):
     functions = {
         'include/rex/graphics/pipeline/shader/dxbc_translator.h': patch_header,
         'src/graphics/d3d12/pipeline_cache.cpp': patch_pipeline,
         'src/graphics/pipeline/shader/dxbc_translator_om.cpp': patch_output,
+        'src/graphics/pipeline/shader/dxbc_translator.cpp': patch_shader,
+    }
+    preceding={
+        'include/rex/graphics/pipeline/shader/dxbc_translator.h': patch_header_v3,
+        'src/graphics/d3d12/pipeline_cache.cpp': patch_pipeline_v3,
+        'src/graphics/pipeline/shader/dxbc_translator_om.cpp': patch_output_v3,
+        'src/graphics/pipeline/shader/dxbc_translator.cpp': lambda text:text,
+    }
+    version4={
+        'include/rex/graphics/pipeline/shader/dxbc_translator.h':patch_header_v4,
+        'src/graphics/d3d12/pipeline_cache.cpp':patch_pipeline_v4,
+        'src/graphics/pipeline/shader/dxbc_translator_om.cpp':patch_output_v4,
+        'src/graphics/pipeline/shader/dxbc_translator.cpp':patch_shader,
     }
     changes = {}
     for relative, patch in functions.items():
         original = subprocess.check_output(['git', '-C', str(source), 'show', 'HEAD:'+relative], text=True)
         expected = patch(original)
         path = source/relative
-        if path.read_text() not in (original, expected):
+        if path.read_text() not in (original, preceding[relative](original), version4[relative](original), expected.replace('REXCVAR_DEFINE_BOOL(ch2k8_native_depth_state, true,', 'REXCVAR_DEFINE_BOOL(ch2k8_native_depth_state, false,'), expected):
             raise ValueError('Unreviewed shader SDK changes: '+relative)
         changes[path] = expected
     for path, expected in changes.items():

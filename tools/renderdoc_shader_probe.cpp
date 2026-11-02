@@ -7,13 +7,33 @@
 #include <string>
 REPLAY_PROGRAM_MARKER();
 int main(int argc,char **argv) {
-  if(argc!=4) {puts("Usage: shader_probe capture.rdc event output-prefix");return 1;}
+  if(argc!=4) {puts("Usage: shader_probe capture.rdc event|shaders output-prefix");return 1;}
   RENDERDOC_InitialiseReplay(GlobalEnvironment{},{});
   auto file=RENDERDOC_OpenCaptureFile();
   if(!file->OpenFile(argv[1],"rdc").OK()) return 2;
   auto opened=file->OpenCapture(ReplayOptions{});
   if(!opened.first.OK()) return 3;
   auto controller=opened.second;
+  const std::string selection=argv[2];
+  if(selection=="shaders") {
+    unsigned index=0;
+    std::ofstream inventory(std::string(argv[3])+"-inventory.tsv");
+    inventory<<"index\tname\tbytes\n";
+    for(const auto &r:controller->GetResources()) {
+      if(r.type!=ResourceType::Shader) continue;
+      auto shader=controller->GetShader(ResourceId(),r.resourceId,{"main",ShaderStage::Pixel});
+      if(!shader || shader->stage!=ShaderStage::Pixel || shader->rawBytes.empty()) continue;
+      const auto prefix=std::string(argv[3])+"-shader"+std::to_string(index);
+      std::ofstream binary(prefix+".dxbc",std::ios::binary);
+      binary.write(reinterpret_cast<const char*>(shader->rawBytes.data()),shader->rawBytes.size());
+      auto assembly=controller->DisassembleShader(ResourceId(),shader,"");
+      std::ofstream text(prefix+".txt");text<<assembly.c_str();
+      inventory<<index<<'\t'<<r.name.c_str()<<'\t'<<shader->rawBytes.size()<<'\n';
+      if(++index==2048) break;
+    }
+    printf("pixel_shaders,%u\n",index);
+    controller->Shutdown();file->Shutdown();RENDERDOC_ShutdownReplay();return index?0:4;
+  }
   controller->SetFrameEvent(unsigned(strtoul(argv[2],nullptr,10)),true);
   const auto state=controller->GetD3D12PipelineState();
   if(!state || !state->pixelShader.reflection) return 4;

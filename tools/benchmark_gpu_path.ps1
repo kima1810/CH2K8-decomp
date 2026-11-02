@@ -14,10 +14,12 @@ param(
     [ValidateSet('default', 'baseline', 'optimized')][string]$NativeConstants = 'default',
     [ValidateSet('default', 'baseline', 'optimized')][string]$NativePackets = 'default',
     [switch]$GpuStats,
+    [switch]$Keyboard,
     [switch]$PacketCompare,
     [switch]$HotFunctions,
     [ValidateSet('default','baseline','optimized','compare')][string]$RamStore = 'default',
     [ValidateSet('default','baseline','optimized')][string]$PixelState = 'default',
+    [ValidateSet('default','baseline','optimized')][string]$DepthState = 'default',
     [ValidateSet('default','baseline','optimized')][string]$GuardedVectorStore = 'default',
     [switch]$ValidateOnly
 )
@@ -54,9 +56,14 @@ if ($Profile.EndsWith('-extent')) { $arguments += '--execute_unclipped_draw_vs_o
 if ($NativeConstants -eq 'baseline') { $arguments += '--no-ch2k8_native_constants' }
 elseif ($NativeConstants -eq 'optimized') { $arguments += '--ch2k8_native_constants' }
 if ($GpuStats) { $arguments += '--ch2k8_gpu_stats' }
+if ($Keyboard) { $arguments += '--mnk_mode' }
 if ($PacketCompare) { $arguments += '--ch2k8_packet_compare' }
 if ($HotFunctions) { $arguments += "--ch2k8_hot_log=$(Join-Path $runRoot 'hot-functions.csv')" }
 if ($RamStore -ne 'default') { $arguments += "--ch2k8_ram_store=$RamStore" }
+if ($DepthState -ne 'default') {
+    if ($backend -ne 'd3d12') {throw 'DepthState specialization currently requires D3D12.'}
+    $arguments += if ($DepthState -eq 'optimized') {'--ch2k8_native_depth_state'} else {'--no-ch2k8_native_depth_state'}
+}
 if ($GuardedVectorStore -ne 'default') {
     $arguments += if ($GuardedVectorStore -eq 'optimized') {'--ch2k8_guarded_vector_store'} else {'--no-ch2k8_guarded_vector_store'}
 }

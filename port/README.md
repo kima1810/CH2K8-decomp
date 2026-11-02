@@ -59,6 +59,11 @@ See the [native-state finding](../docs/findings/2026-11-01-native-constant-state
 The patched D3D12 ROV backend also specializes pixel shaders to exact MSAA,
 depth-format, alpha-test, RT0 format and supported blend state. This removes
 generic Xbox shader branches while preserving the existing rendering path.
+Exact normalized depth/stencil decisions are also specialized, including the
+existing color/depth alias rule. `--no-ch2k8_native_depth_state` independently
+restores dynamic depth handling. See the
+[depth-specialization measurements](../docs/findings/2026-11-01-native-depth-specialization.md).
+
 It is enabled by default; `--no-ch2k8_native_pixel_state` restores the original
 dynamic shader path. Other targets and unfamiliar blend modes retain dynamic
 handling. Vulkan is unchanged by this shader optimization. The
@@ -297,3 +302,12 @@ device captures and native replay/AMD telemetry tools are documented in the
 The later measurements refine the GPU attribution above: normal clocks and
 substantial gaps outside summed draw costs point to CPU/synchronization work
 still requiring investigation. There is no verified speed fix yet.
+
+For a manually operated diagnostic run, use
+`tools/capture_gpu_workload.ps1 -ShaderState optimized -ManualTrigger -GpuStats -DurationSeconds 600`.
+Open the desired scene yourself, then create the empty `capture.trigger` file
+inside the run directory printed by the script. This starts a five-second
+native device capture across presentation boundaries; it sends no game input.
+The script still stops at its deadline. Close the game before timing a replay
+so the GPU is idle. `-DepthState baseline|optimized` selects the independently
+controlled depth specialization in both capture and ordinary benchmark tools.

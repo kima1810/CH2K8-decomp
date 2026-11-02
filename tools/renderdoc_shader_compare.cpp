@@ -11,7 +11,7 @@ static void collect(const rdcarray<ActionDescription> &actions,std::vector<unsig
   for(const auto &a:actions) {ids.push_back(a.eventId);collect(a.children,ids);}
 }
 int main(int argc,char **argv) {
-  if(argc!=5) {puts("Usage: shader_compare capture.rdc target-event candidate.dxbc output-prefix");return 1;}
+  if(argc!=5 && argc!=6) {puts("Usage: shader_compare capture.rdc target-event candidate.dxbc output-prefix [control.dxbc]");return 1;}
   RENDERDOC_InitialiseReplay(GlobalEnvironment{},{});
   auto file=RENDERDOC_OpenCaptureFile();
   if(!file->OpenFile(argv[1],"rdc").OK()) return 2;
@@ -29,6 +29,20 @@ int main(int argc,char **argv) {
   input.read(reinterpret_cast<char*>(bytes.data()),bytes.size());
   auto built=controller->BuildTargetShader("main",ShaderEncoding::DXBC,bytes,{},ShaderStage::Pixel);
   if(built.first==ResourceId()) {printf("Build failed: %s\n",built.second.c_str());return 6;}
+  ResourceId control;
+  if(argc==6) {
+    std::ifstream source(argv[5],std::ios::binary|std::ios::ate);
+    if(!source) return 5;
+    bytebuf data;data.resize(size_t(source.tellg()));source.seekg(0);
+    source.read(reinterpret_cast<char*>(data.data()),data.size());
+    auto baseline=controller->BuildTargetShader("main",ShaderEncoding::DXBC,data,{},ShaderStage::Pixel);
+    if(baseline.first==ResourceId()) return 6;
+    control=baseline.first;puts("Control shader: supplied bytecode");
+  }
+  auto set_control=[&]() {
+    if(control==ResourceId()) controller->RemoveReplacement(original);
+    else controller->ReplaceResource(original,control);
+  };
   ResourceId edram;
   for(const auto &r:controller->GetResources())
     if(r.name=="EDRAM Buffer") {edram=r.resourceId;break;}
@@ -39,6 +53,12 @@ int main(int argc,char **argv) {
   for(auto event:checks) {
     controller->RemoveReplacement(original);controller->SetFrameEvent(event,true);
     auto baseline=controller->GetBufferData(edram,0,0);
+    if(control!=ResourceId()) {
+      set_control();controller->SetFrameEvent(event,true);
+      if(baseline!=controller->GetBufferData(edram,0,0)) {
+        printf("Control differs from original EDRAM at %u\n",event);return 8;
+      }
+    }
     controller->ReplaceResource(original,built.first);controller->SetFrameEvent(event,true);
     auto candidate=controller->GetBufferData(edram,0,0);
     if(baseline.empty() || !std::any_of(baseline.begin(),baseline.end(),
@@ -64,7 +84,7 @@ int main(int argc,char **argv) {
   for(unsigned trial=0;trial<4;++trial) for(unsigned order=0;order<2;++order) {
     const bool native=bool(order^(trial&1));
     if(native) controller->ReplaceResource(original,built.first);
-    else controller->RemoveReplacement(original);
+    else set_control();
     const auto values=controller->FetchCounters({counter});
     if(values.empty()) return 10;
     double total=0,target_ms=0;
@@ -75,5 +95,6 @@ int main(int argc,char **argv) {
     printf("trial=%u variant=%s total_ms=%.6f target_ms=%.6f events=%zu\n",trial,native?"specialized":"original",total,target_ms,values.size());fflush(stdout);
   }
   controller->RemoveReplacement(original);controller->FreeTargetResource(built.first);
+  if(control!=ResourceId()) controller->FreeTargetResource(control);
   controller->Shutdown();file->Shutdown();RENDERDOC_ShutdownReplay();return 0;
 }
