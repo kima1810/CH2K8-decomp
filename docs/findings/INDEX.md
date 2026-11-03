@@ -1,5 +1,7 @@
 # Findings index
 
+- [2026-11-03 Native geometry kernels](2026-11-03-native-geometry-kernels.md): batch normalization, hoist span checks and share physical-address adaptation across three dominant kernels. Live interleaving reduces combined geometry work about 10%; identical-input full jobs improve 14%, 18% and 7%, with bit-exact state and RAM. Repeated normal-play windows produce 40–45% more submissions; scenes remain unmatched and stable 60 FPS is unproven.
+
 - [2026-11-03 Packed-vector lane order](2026-11-03-packed-vector-lane-order.md): new optimized-build profiling confirms three geometry routines remain hot; remove redundant pack/unpack lane reversals with bit-exact outputs. Local helpers improve 7–9%; whole-game FPS benefit remains unestablished.
 
 - [2026-11-03 Native presentation and Release build](2026-11-03-native-presentation-and-release-build.md): detect false-success VBlank waits instead of flooding host presentation; restore explicit optimized Release flags. Visible native-target samples improve from 622 ms to 26.5 ms median guest submissions with unchanged visual settings; older-hardware and consistent-60-FPS validation remain open.

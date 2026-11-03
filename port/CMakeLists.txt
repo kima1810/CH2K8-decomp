@@ -38,6 +38,16 @@ file(CONFIGURE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/rexglue.cmake"
     CONTENT "${CH2K8_SDK_CMAKE_CONTENT}" @ONLY)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CH2K8_SDK_CMAKE}")
 include("${CMAKE_CURRENT_BINARY_DIR}/rexglue.cmake")
+add_custom_command(
+    OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/generated/default/codegen.build.stamp"
+    APPEND DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/../tools/run_codegen.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../tools/fix_codegen.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../tools/optimize_codegen.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../tools/prove_vector_store_ranges.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../tools/geometry_batch_codegen.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../tools/geometry_ram_codegen.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../tools/geometry_input_codegen.py")
 set(CH2K8_GAME_SOURCE "" CACHE FILEPATH "Xbox ISO or extracted disc directory for folder import")
 set(CH2K8_ASSET_DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/out/folder-game" CACHE PATH "New folder installation directory")
 if(CH2K8_GAME_SOURCE)

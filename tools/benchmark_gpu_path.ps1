@@ -22,6 +22,7 @@ param(
     [switch]$ColdShaderCache,
     [switch]$PacketCompare,
     [switch]$HotFunctions,
+    [ValidateSet('default','baseline','optimized','compare')][string]$GeometryBatch = 'default',
     [ValidateSet('default','baseline','optimized','compare')][string]$RamStore = 'default',
     [ValidateSet('default','baseline','optimized')][string]$PixelState = 'default',
     [ValidateSet('default','baseline','optimized')][string]$DepthState = 'default',
@@ -72,6 +73,7 @@ if ($ShaderCompilation -eq 'synchronous') { $arguments += '--no-async_shader_com
 if ($ColdShaderCache) { $arguments += '--no-store_shaders' }
 if ($PacketCompare) { $arguments += '--ch2k8_packet_compare' }
 if ($HotFunctions) { $arguments += "--ch2k8_hot_log=$(Join-Path $runRoot 'hot-functions.csv')" }
+if ($GeometryBatch -ne 'default') { $arguments += "--ch2k8_geometry_batch=$GeometryBatch" }
 if ($RamStore -ne 'default') { $arguments += "--ch2k8_ram_store=$RamStore" }
 if ($DepthState -ne 'default') {
     if ($backend -ne 'd3d12') {throw 'DepthState specialization currently requires D3D12.'}

@@ -18,6 +18,13 @@ they do not establish an FPS improvement or gameplay stability result. See the
 This is an experimental native port. Successful code generation or compilation
 does not establish that menus or gameplay work.
 
+The three dominant CPU geometry routines use proved native kernels that batch
+independent normalization operations and share validated address adaptation.
+Normal play omits per-store diagnostic counters. `--ch2k8_geometry_batch=baseline`
+restores the previous RAM kernels; `compare` interleaves the two paths for opt-in
+hot-function profiling. The [kernel finding](../docs/findings/2026-11-03-native-geometry-kernels.md)
+records complete-job and live measurements, bitwise checks and remaining limits.
+
 Release builds explicitly optimize both the generated game and host glue, even
 if the toolchain leaves `CMAKE_CXX_FLAGS_RELEASE` empty. They retain strict
 floating-point behavior, signed-integer wrapping and the existing CPU baseline. Native presentation also

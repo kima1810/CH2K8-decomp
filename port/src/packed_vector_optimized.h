@@ -1,5 +1,6 @@
 #pragma once
 #include <rex/ppc.h>
+#include "geometry_batch_optimized.h"
 #include <simde/x86/sse4.1.h>
 
 // [CONFIRMED] Bit-equivalent to the corrected type-6 biased-float pack.
@@ -76,5 +77,6 @@ private:
   bool unpack_ = false;
   bool store_ = false;
   bool ram_ = false;
+  bool batch_ = false;
   const uint64_t *ram_counts_ = nullptr;
 };

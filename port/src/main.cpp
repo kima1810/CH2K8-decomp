@@ -37,6 +37,10 @@ void Ch2k8ConfigureHotFunctions(int selected_mode, int selected_unpack,
                                 int selected_store, int selected_ram,
                                 bool selected_guarded_store, const char *path);
 void Ch2k8CloseHotLog();
+void Ch2k8ConfigureGeometryBatch(int);
+REXCVAR_DEFINE_STRING(ch2k8_geometry_batch, "optimized", "CH2K8/Performance",
+                      "Exact normalization batching: baseline, optimized, compare")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
 REXCVAR_DEFINE_STRING(ch2k8_vector_pack, "optimized", "CH2K8/Performance",
                       "Packed-vector path: baseline, optimized, or compare")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
@@ -168,6 +172,11 @@ protected:
       REXLOG_ERROR("Invalid ch2k8_vector_unpack: {}", unpack);
       std::exit(EXIT_FAILURE);
     }
+    const auto batch=REXCVAR_GET(ch2k8_geometry_batch);
+    if(batch!="baseline" && batch!="optimized" && batch!="compare") {
+      REXLOG_ERROR("Invalid ch2k8_geometry_batch: {}",batch);std::exit(EXIT_FAILURE);
+    }
+    Ch2k8ConfigureGeometryBatch(batch=="compare"?2:batch=="optimized"?1:0);
     Ch2k8ConfigureHotFunctions(pack == "compare"     ? 2
                                : pack == "optimized" ? 1
                                                      : 0,
@@ -223,7 +232,7 @@ protected:
           "ch2k8_native_constants", "ch2k8_native_packets",
           "ch2k8_packet_compare", "ch2k8_gpu_stats",
           "ch2k8_present_stats",
-          "ch2k8_native_present_pacing",
+          "ch2k8_native_present_pacing", "ch2k8_geometry_batch",
           "ch2k8_native_pixel_state", "ch2k8_native_depth_state",
           "ch2k8_native_full_write",
           "ch2k8_native_vertex_fetch", "ch2k8_vertex_fetch_compare",
