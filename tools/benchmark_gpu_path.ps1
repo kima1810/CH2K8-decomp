@@ -14,6 +14,9 @@ param(
     [ValidateSet('default', 'baseline', 'optimized')][string]$NativeConstants = 'default',
     [ValidateSet('default', 'baseline', 'optimized')][string]$NativePackets = 'default',
     [switch]$GpuStats,
+    [switch]$PresentStats,
+    [switch]$Visible,
+    [ValidateSet('default','baseline','optimized')][string]$PresentPacing = 'default',
     [switch]$Keyboard,
     [ValidateSet('default','synchronous')][string]$ShaderCompilation = 'default',
     [switch]$ColdShaderCache,
@@ -23,6 +26,7 @@ param(
     [ValidateSet('default','baseline','optimized')][string]$PixelState = 'default',
     [ValidateSet('default','baseline','optimized')][string]$DepthState = 'default',
     [ValidateSet('default','baseline','optimized')][string]$FullWrite = 'default',
+    [ValidateSet('default','baseline','optimized','compare')][string]$VertexFetch = 'default',
     [ValidateSet('default','baseline','optimized')][string]$GuardedVectorStore = 'default',
     [switch]$ValidateOnly
 )
@@ -59,6 +63,10 @@ if ($Profile.EndsWith('-extent')) { $arguments += '--execute_unclipped_draw_vs_o
 if ($NativeConstants -eq 'baseline') { $arguments += '--no-ch2k8_native_constants' }
 elseif ($NativeConstants -eq 'optimized') { $arguments += '--ch2k8_native_constants' }
 if ($GpuStats) { $arguments += '--ch2k8_gpu_stats' }
+if ($PresentStats) { $arguments += '--ch2k8_present_stats' }
+if ($PresentPacing -ne 'default') {
+    $arguments += if ($PresentPacing -eq 'baseline') {'--no-ch2k8_native_present_pacing'} else {'--ch2k8_native_present_pacing'}
+}
 if ($Keyboard) { $arguments += '--mnk_mode' }
 if ($ShaderCompilation -eq 'synchronous') { $arguments += '--no-async_shader_compilation' }
 if ($ColdShaderCache) { $arguments += '--no-store_shaders' }
@@ -82,6 +90,11 @@ if ($FullWrite -ne 'default') {
     if ($backend -ne 'd3d12') {throw 'FullWrite specialization requires D3D12.'}
     $arguments += if ($FullWrite -eq 'optimized') {'--ch2k8_native_full_write'} else {'--no-ch2k8_native_full_write'}
 }
+if ($VertexFetch -ne 'default') {
+    if ($backend -ne 'd3d12') {throw 'VertexFetch specialization requires D3D12.'}
+    $arguments += if ($VertexFetch -eq 'baseline') {'--no-ch2k8_native_vertex_fetch'} else {'--ch2k8_native_vertex_fetch'}
+    if ($VertexFetch -eq 'compare') { $arguments += '--ch2k8_vertex_fetch_compare' }
+}
 foreach ($argument in $arguments) {
     if ($argument.Contains('"')) { throw 'Paths must not contain double quotes.' }
 }
@@ -89,6 +102,7 @@ $configuration = [ordered]@{
     profile = $Profile; executable = $Executable; arguments = $arguments
     capture_seconds = $DurationSeconds; run_root = $runRoot
     matched_scene = $false
+    visible_window = [bool]$Visible
 }
 if ($ValidateOnly) { $configuration | ConvertTo-Json -Depth 4; return }
 if (Get-Process ch2k8 -ErrorAction SilentlyContinue) { throw 'CH2K8 is already running.' }
@@ -104,7 +118,8 @@ $telemetry = $null
 $writer = $null
 $stoppedAtLimit = $false
 try {
-    $game = Start-Process -FilePath $Executable -WorkingDirectory (Split-Path $Executable) -ArgumentList ($arguments | ForEach-Object { '"' + $_ + '"' }) -WindowStyle Hidden -PassThru
+    $windowStyle = if ($Visible) { 'Normal' } else { 'Hidden' }
+    $game = Start-Process -FilePath $Executable -WorkingDirectory (Split-Path $Executable) -ArgumentList ($arguments | ForEach-Object { '"' + $_ + '"' }) -WindowStyle $windowStyle -PassThru
     $configuration.process_id = $game.Id
     $configuration | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $runRoot 'run.json') -Encoding utf8
     Write-Host "GPU experiment: $Profile; PID $($game.Id); local output: $runRoot"

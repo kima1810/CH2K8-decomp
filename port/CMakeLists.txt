@@ -7,6 +7,7 @@ project(ch2k8 VERSION 0.0.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+include(cmake/Ch2k8BuildOptions.cmake)
 
 find_package(Python3 3.11 REQUIRED COMPONENTS Interpreter)
 add_library(ch2k8_asset_codec SHARED ../tools/asset_codec.cpp)
@@ -116,3 +117,11 @@ if(TARGET ch2k8_recomp)
     target_compile_options(ch2k8_recomp PRIVATE
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Werror=shift-count-overflow>)
 endif()
+
+# Keep release optimization explicit even with an empty CMAKE_CXX_FLAGS_RELEASE.
+# No fast-math, host-only ISA extensions or changed guest arithmetic are enabled.
+foreach(CH2K8_BUILD_TARGET IN ITEMS ch2k8 ch2k8_recomp ch2k8_asset_codec ch2k8_tools ch2k8_assets_check ch2k8_vfs_check)
+    if(TARGET ${CH2K8_BUILD_TARGET})
+        ch2k8_apply_build_options(${CH2K8_BUILD_TARGET})
+    endif()
+endforeach()

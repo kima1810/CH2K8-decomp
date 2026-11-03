@@ -41,6 +41,7 @@ def summarize_run(root, start=120, end=180):
     root = Path(root)
     metadata = json.loads((root/'run.json').read_text(encoding='utf-8-sig'))
     result = {'profile': metadata.get('profile'),
+              'visible_window': metadata.get('visible_window'),
               'executable_sha256': metadata.get('executable_sha256'),
               'runtime_binaries_sha256': metadata.get('runtime_binaries_sha256'),
               'matched_scene': False, 'window_seconds': [start, end],

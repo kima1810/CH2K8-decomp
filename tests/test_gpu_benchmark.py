@@ -12,6 +12,22 @@ sys.path.insert(0, str(ROOT/'tools'))
 from summarize_gpu_run import summarize_run, inspect_native_readback
 
 
+@pytest.mark.parametrize('pacing,flag',[('baseline','--no-ch2k8_native_present_pacing'),('optimized','--ch2k8_native_present_pacing')])
+def test_visible_presentation_diagnostic_controls(tmp_path,pacing,flag):
+    shell=shutil.which('powershell.exe')
+    if not shell:pytest.skip('Requires Windows PowerShell')
+    data=tmp_path/'disc';data.mkdir();(data/'default.xex').touch()
+    executable=tmp_path/'unused.exe';executable.touch()
+    result=subprocess.run([shell,'-NoProfile','-ExecutionPolicy','Bypass','-File',str(ROOT/'tools/benchmark_gpu_path.ps1'),
+        '-ValidateOnly','-GameData',str(data),'-Executable',str(executable),'-Visible','-PresentStats','-PresentPacing',pacing],
+        capture_output=True,text=True)
+    assert result.returncode==0,result.stderr
+    config=json.loads(result.stdout)
+    assert config['visible_window'] is True
+    assert flag in config['arguments'] and '--ch2k8_present_stats' in config['arguments']
+    assert not Path(config['run_root']).exists()
+
+
 @pytest.mark.parametrize('profile,backend,target,batching', [
     ('d3d12-rov', 'd3d12', '--render_target_path_d3d12=rov', False),
     ('d3d12-rov-batched', 'd3d12', '--render_target_path_d3d12=rov', True),
@@ -45,6 +61,7 @@ def test_gpu_profiles_launch_the_requested_path_without_changing_coherence(tmp_p
     assert not any('readback' in arg or 'occlusion' in arg for arg in args)
     assert '--ch2k8_output_capture_count=2' in args
     assert config['capture_seconds'] == 210 and not config['matched_scene']
+    assert config['visible_window'] is False
     assert not Path(config['run_root']).exists()
     (data/'default.xex').unlink()
     failure = subprocess.run(command, capture_output=True, text=True)
