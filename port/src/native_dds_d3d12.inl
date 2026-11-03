@@ -1,8 +1,9 @@
 // Included inside rex::graphics::d3d12. Version-patched into the pinned SDK.
 // The guest texture/key and its watched memory stay intact. Native textures and
-// obsolete descriptors remain alive until the texture cache's normal fence-safe
-// eviction, so reusing a guest address cannot leave an old DDS bound.
+// obsolete descriptors remain alive until their submission completes, so
+// reusing a guest address cannot leave an old DDS bound.
 bool D3D12TextureCache::TryLoadNativeDDS(D3D12Texture& texture) {
+  texture.CollectNativeRetired(*this,command_processor_.GetCompletedSubmission());
   const auto* enabled=std::getenv("CH2K8_NATIVE_DDS");
   if(enabled && enabled[0]=='0')return false;
   const auto key=texture.key();
@@ -30,25 +31,30 @@ bool D3D12TextureCache::TryLoadNativeDDS(D3D12Texture& texture) {
           }
         }
         return hash;
-      });
+      },false,texture.native_dds_.get());
     } catch(const std::exception& e) { REXLOG_ERROR("Native DDS rejected: {}",e.what()); }
   }
   if(dds && texture.native_dds_ && dds->identity==texture.native_dds_->identity) return true;
   if(texture.native_resource_) {
-    texture.native_retired_resources_.push_back(std::move(texture.native_resource_));
-    texture.native_dds_.reset(); texture.RetireNativeDescriptors();
+    native_pending_retirements_.insert(&texture);
+    texture.RetireNativeResource(command_processor_.GetCurrentSubmission());
   }
   if(!dds) return false;
   auto* device=command_processor_.GetD3D12Provider().GetDevice();
   ::ch2k8::DDSUpload upload;
+  std::shared_ptr<const ::ch2k8::NativeDDSInfo> info;
   try {
+    info=std::make_shared<const ::ch2k8::NativeDDSInfo>(*dds);
     upload=::ch2k8::UploadDDS(device,*dds,GetDXGIResourceFormat(key),[&](const auto& to,const auto& from) {
       command_processor_.GetDeferredCommandList().D3DCopyTextureRegion(&to,0,0,0,&from,nullptr);
     });
   } catch(const std::exception& e) { REXLOG_ERROR("Native DDS upload failed: {}",e.what()); return false; }
   native_uploads_.emplace_back(command_processor_.GetCurrentSubmission(),std::move(upload.staging));
   texture.native_resource_=std::move(upload.texture); texture.native_state_=D3D12_RESOURCE_STATE_COPY_DEST;
-  texture.native_dds_=std::move(dds); texture.RetireNativeDescriptors();
+  // The upload buffer owns the GPU copy source now. Keep only binding metadata,
+  // rather than retaining a second compressed payload for every resident texture.
+  texture.native_dds_=std::move(info); texture.RetireNativeDescriptors();
+  texture.native_allocation_=upload.allocation;
   texture.AccountNativeMemory(upload.allocation);
   REXLOG_INFO("Native DDS upload: {} ({}x{}, {} mip levels; guest tiling bypassed)",texture.native_dds_->path,texture.native_dds_->width,texture.native_dds_->height,texture.native_dds_->mips);
   return true;

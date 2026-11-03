@@ -6,6 +6,15 @@ Folder-based Xbox installations, editable SCNE/ROST components and native D3D12
 DDS replacements are documented in [loose assets](../docs/formats/loose_assets.md).
 Use the patched source SDK / `win-amd64-vulkan` preset for native DDS support.
 
+Native DDS uploads retain only dimensions, mip count and identity in CPU RAM;
+the compressed file payload is released after staging. Resident identity checks
+avoid re-reading the file. Superseded D3D12 textures and their descriptors are
+reclaimed on texture requests once the submission fence completes, and their
+allocation is removed from cache memory accounting. In-flight GPU resources
+remain protected. These changes reduce replacement-related RAM/VRAM retention;
+they do not establish an FPS improvement or gameplay stability result. See the
+[memory-retention checks](../docs/findings/2026-11-02-native-texture-memory.md).
+
 This is an experimental native port. Successful code generation or compilation
 does not establish that menus or gameplay work.
 

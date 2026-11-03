@@ -68,6 +68,37 @@ def prepare_native_assets(source):
     if 'native_uploads_' not in text:
         text=once(text,'  bool TryLoadNativeDDS(D3D12Texture& texture);','  bool TryLoadNativeDDS(D3D12Texture& texture);\n  std::vector<std::pair<uint64_t, Microsoft::WRL::ComPtr<ID3D12Resource>>> native_uploads_;')
         header.write_text(text,encoding='utf-8',newline='\n')
+    # Upgrade both pristine and previously patched SDKs, retaining fence-safe
+    # ownership while allowing frequently replaced textures to shed old VRAM.
+    if '// CH2K8 native DDS retirement v2' not in text:
+        text=once(text,'    std::shared_ptr<const ::ch2k8::NativeDDS> native_dds_;',
+                  '    std::shared_ptr<const ::ch2k8::NativeDDSInfo> native_dds_;')
+        text=once(text,'    std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> native_retired_resources_;','''    // CH2K8 native DDS retirement v2
+    struct NativeRetired {
+      uint64_t submission,bytes;
+      Microsoft::WRL::ComPtr<ID3D12Resource> resource;
+      std::vector<uint32_t> descriptors;
+    };
+    uint64_t native_allocation_=0;
+    std::vector<NativeRetired> native_retired_resources_;
+    void RetireNativeResource(uint64_t submission) {
+      // Allocate the queue slot before transferring ownership.
+      native_retired_resources_.push_back({submission,native_allocation_,{}, {}});
+      auto& retired=native_retired_resources_.back();
+      retired.resource=std::move(native_resource_);
+      RetireNativeDescriptors();
+      retired.descriptors.swap(native_retired_descriptors_);
+      native_allocation_=0; native_dds_.reset();
+    }
+    void CollectNativeRetired(D3D12TextureCache& cache,uint64_t completed) {
+      std::erase_if(native_retired_resources_,[&](const NativeRetired& retired) {
+        if(retired.submission>completed) return false;
+        for(auto descriptor:retired.descriptors) cache.ReleaseTextureDescriptor(descriptor);
+        SetHostMemoryUsage(GetHostMemoryUsage()-retired.bytes);
+        return true;
+      });
+    }''')
+        header.write_text(text,encoding='utf-8',newline='\n')
     cpp=source/'src/graphics/d3d12/texture_cache.cpp'
     text=cpp.read_text(encoding='utf-8')
     if '// CH2K8 native DDS v1' not in text:
@@ -86,10 +117,34 @@ bool D3D12TextureCache::LoadTextureDataFromResidentMemoryImpl(''')
     key.key = binding->key;''')
         text=once(text,'  uint32_t mip_levels = texture_key.mip_max_level + 1;','  uint32_t mip_levels = texture.native_dds_ ? texture.native_dds_->mips : texture_key.mip_max_level + 1;')
         cpp.write_text(text,encoding='utf-8',newline='\n')
+    if '// CH2K8 native DDS retirement pump v1' not in text:
+        header_text=header.read_text(encoding='utf-8')
+        header_text=once(header_text,'  bool TryLoadNativeDDS(D3D12Texture& texture);','''  // CH2K8 native DDS retirement pump v1
+  std::unordered_set<D3D12Texture*> native_pending_retirements_;
+  bool TryLoadNativeDDS(D3D12Texture& texture);''')
+        header_text=once(header_text,'#include <rex/graphics/native_dds.h>',
+                         '#include <rex/graphics/native_dds.h>\n#include <unordered_set>')
+        header.write_text(header_text,encoding='utf-8',newline='\n')
+        text=once(text,'void D3D12TextureCache::RequestTextures(uint32_t used_texture_mask) {','''void D3D12TextureCache::RequestTextures(uint32_t used_texture_mask) {
+  // CH2K8 native DDS retirement pump v1
+  const auto completed=command_processor_.GetCompletedSubmission();
+  std::erase_if(native_pending_retirements_,[&](D3D12Texture* texture) {
+    texture->CollectNativeRetired(*this,completed);
+    return texture->native_retired_resources_.empty();
+  });''')
+        text=once(text,'  auto& d3d12_texture_cache = static_cast<D3D12TextureCache&>(texture_cache());',
+                  '  auto& d3d12_texture_cache = static_cast<D3D12TextureCache&>(texture_cache());\n  d3d12_texture_cache.native_pending_retirements_.erase(this);')
+        cpp.write_text(text,encoding='utf-8',newline='\n')
     if '#include <rex/graphics/native_dds_upload.h>' not in text:
         text=once(text,'#include <rex/graphics/flags.h>','#include <rex/graphics/flags.h>\n#include <rex/graphics/native_dds_upload.h>')
         text=once(text,'void D3D12TextureCache::RequestTextures(uint32_t used_texture_mask) {','''void D3D12TextureCache::RequestTextures(uint32_t used_texture_mask) {
   std::erase_if(native_uploads_,[&](const auto& upload){return upload.first<=command_processor_.GetCompletedSubmission();});''')
+        cpp.write_text(text,encoding='utf-8',newline='\n')
+    if '// CH2K8 release remaining retired descriptors' not in text:
+        text=once(text,'  for (auto descriptor : native_retired_descriptors_) d3d12_texture_cache.ReleaseTextureDescriptor(descriptor);','''  // CH2K8 release remaining retired descriptors (destruction is fence-safe).
+  for (const auto& retired : native_retired_resources_)
+    for (auto descriptor : retired.descriptors) d3d12_texture_cache.ReleaseTextureDescriptor(descriptor);
+  for (auto descriptor : native_retired_descriptors_) d3d12_texture_cache.ReleaseTextureDescriptor(descriptor);''')
         cpp.write_text(text,encoding='utf-8',newline='\n')
     (source/'include/rex/graphics/native_dds.h').write_bytes((ROOT/'port/src/native_dds.h').read_bytes())
     (source/'include/rex/graphics/native_dds_upload.h').write_bytes((ROOT/'port/src/native_dds_upload.h').read_bytes())

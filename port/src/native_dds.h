@@ -14,9 +14,11 @@
 #include <vector>
 
 namespace ch2k8 {
-struct NativeDDS {
+struct NativeDDSInfo {
   uint32_t width=0,height=0,mips=0,format=0,bytes_per_block=0;
   std::string identity,path;
+};
+struct NativeDDS : NativeDDSInfo {
   std::vector<uint8_t> data;
   static uint32_t LE(const uint8_t* p) { return uint32_t(p[0])|uint32_t(p[1])<<8|uint32_t(p[2])<<16|uint32_t(p[3])<<24; }
   static NativeDDS Parse(std::vector<uint8_t> bytes,uint32_t original_width,uint32_t original_height,uint32_t original_format) {
@@ -76,13 +78,20 @@ class NativeDDSCatalog {
   bool HasCandidates(uint32_t width,uint32_t height,uint32_t format) const {
     return items_.contains(Key(width,height,format));
   }
-  std::shared_ptr<const NativeDDS> Find(uint32_t width,uint32_t height,uint32_t format,const std::function<uint64_t()>& hash_pixels,bool include_stock=false) {
+  // A resident identity needs only metadata: its GPU resource already contains
+  // the payload. Avoid re-reading the file after releasing the CPU copy.
+  std::shared_ptr<const NativeDDS> Find(uint32_t width,uint32_t height,uint32_t format,const std::function<uint64_t()>& hash_pixels,bool include_stock=false,const NativeDDSInfo* resident=nullptr) {
     auto found=items_.find(Key(width,height,format));
     if(found==items_.end()) return {};
     const auto hash=hash_pixels();
     for(const auto& item:found->second) {
       if(item.hash!=hash) continue;
       if(!include_stock && unchanged_.contains(item.identity)) return {};
+      if(resident && resident->identity==item.identity) {
+        auto dds=std::make_shared<NativeDDS>();
+        static_cast<NativeDDSInfo&>(*dds)=*resident;
+        return dds;
+      }
       if(auto cached=loaded_.find(item.identity);cached!=loaded_.end()) if(auto live=cached->second.lock()) return live;
       auto supplied=std::filesystem::u8path(item.path);
       if(supplied.is_absolute() || supplied.has_root_name()) throw std::runtime_error("Absolute DDS path");
