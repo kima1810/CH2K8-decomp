@@ -7,7 +7,7 @@
 3. Double-click **Launch CH2K8.cmd**. For an ISO, click **Import ISO...**, select the ISO, then choose a parent folder for the new installation. The launcher creates `<ISO name>-assets`, extracts editable loose resources, and selects it when finished. Allow several minutes and enough free space for decoded assets. Progress and cancellation are available; the original ISO is unchanged. Existing destinations are never overwritten. Later launches reuse the extracted folder. If you already have a game folder containing `default.xex`, use **Browse...** instead. Click **Check setup**, then **Launch game**.
 4. Start with Direct3D 12, Automatic, 1280x720, 60 Hz, Windowed. Increase resolution or choose borderless after checking gameplay. Accurate Xbox blending is the slower compatibility option. Vulkan remains experimental; folder asset replacements require D3D12.
 
-No compiler or SDK is needed for a prebuilt beta. ISO import and editable folder installations (`assets.json`) require Python 3.11+ available as `python.exe` on PATH; their edits are validated/prepared before launch. Ordinary extracted disc installations do not need Python. The ISO is converted into the loose folder system, rather than mounted directly. Failed or cancelled imports discard their temporary extraction and leave existing installations untouched. Import logs are saved in `port/userdata/imports`.
+The complete beta ZIP includes its own isolated Python 3.14.10 and required Microsoft C++ runtime DLLs, and pinned SDL controller mappings. Testers do not need to install Python, Visual Studio, a compiler or SDK, and no download is needed at first launch. Folder edits are validated/prepared before launch. The binary target is Windows 10/11 x64 on Intel/AMD CPUs with SSE4.1 and a D3D12-capable GPU/driver; ARM, 32-bit Windows, Linux and macOS are outside this beta. The importer checks the original USA executable hash, archive part extents and minimum free space before extracting. Other games/revisions are refused. Decoded assets can require more than the initial space estimate. The ISO is converted into the loose folder system, rather than mounted directly. Failed or cancelled imports discard their temporary extraction and leave existing installations untouched. Import logs are saved in `port/userdata/imports`.
 
 Command-line import is also available from the beta folder:
 
@@ -19,7 +19,7 @@ Add `-Launch` to start the game after a successful import. Source users can also
 
 Settings and saves stay in `port/userdata` beside the launcher. **Saves / settings** opens that folder; back it up before updating. Extract updates to a new folder, then copy your userdata into the same location. Keep game data separately and select it again. Remove the beta folder to uninstall after backing up saves; your separately stored game data remains available.
 
-First startup can take longer while shaders compile. If launch fails, use **Check setup** and confirm the complete ZIP was extracted. **Open logs** opens the selected runtime's logs folder. For a beta report include the version, GPU, renderer, resolution, rendering mode, reproduction steps and runtime log. Review logs for personal paths before sharing. Exit the game before changing runtime files.
+First startup can take longer while shaders compile. If launch fails, use **Check setup** and confirm the complete ZIP was extracted. **Open logs** opens the selected runtime's logs folder. Click **Export bug report** to create a ZIP with version and runtime hashes, hardware/driver information, selected options, preflight results and recent log tails. Common paths are redacted, but review the ZIP before sharing and add reproduction steps. See **BETA_TESTING.md** for the cross-PC test matrix. No report is uploaded automatically. Exit the game before changing runtime files.
 
 ## Beta scope
 
@@ -30,7 +30,8 @@ This is an experimental native recompilation. Menu boot and live gameplay have b
 Build the current patched dual-backend runtime using `port/README.md`, then run:
 
 ```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/prepare_beta_deps.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File tools/package_beta.ps1
 ```
 
-The script creates a new timestamped portable ZIP under `out/beta`, containing the executable, required runtime DLLs, launcher, asset preparation tools, version metadata and SHA-256 inventory. It includes no disc data, generated source, saves or developer environment. The source branch does not contain compiled binaries; distribute the ZIP separately after beta acceptance testing. Building from source still requires the SDK and game data described in `port/README.md`.
+The script creates a new timestamped portable ZIP under `out/beta`, containing the executable, required runtime DLLs, launcher, asset preparation tools, version metadata, third-party notices and a SHA-256 inventory. Dependency preparation pins the official Python embeddable ZIP by SHA-256, pins the SDL controller database and license by SHA-256, and copies redistributable x64 CRT DLLs from Visual Studio; pass `-CrtDirectory` if it is installed elsewhere. Packaging fails if these dependencies are missing. It includes no disc data, generated source, saves or developer environment. The source branch does not contain compiled binaries; distribute the ZIP separately after beta acceptance testing. Building from source still requires the SDK and game data described in `port/README.md`.

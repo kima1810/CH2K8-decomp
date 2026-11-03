@@ -1,5 +1,7 @@
 # Xbox folder assets and native DDS
 
+For the standalone Windows beta package, ISO importer, bundled dependencies and tester workflow, see [BETA.md](../../BETA.md) and the [portability validation](../findings/2026-11-02-beta-portability.md). The older folder packager described below remains a checkout-oriented developer tool.
+
 ## Current direct-folder build (2026-11-02)
 
 The current CLI import creates `storage: loose-resources` installations. Resource

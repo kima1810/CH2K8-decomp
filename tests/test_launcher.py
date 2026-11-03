@@ -73,6 +73,25 @@ def test_launcher_selects_native_or_accurate_targets(tmp_path, backend, path, ta
     assert synchronous == bounded
 
 
+def fake_pe(import_dll=None):
+    import struct
+    data = bytearray(1024)
+    data[:2] = b'MZ'
+    struct.pack_into('<I', data, 60, 0x80)
+    data[0x80:0x84] = b'PE\0\0'
+    struct.pack_into('<HH', data, 0x84, 0x8664, 1)
+    struct.pack_into('<H', data, 0x94, 240)
+    struct.pack_into('<H', data, 0x98, 0x20b)
+    struct.pack_into('<IIII', data, 0x188+8, 512, 0x1000, 512, 512)
+    if import_dll:
+        struct.pack_into('<II', data, 0x98+112+8, 0x1000, 40)
+        struct.pack_into('<I', data, 512+12, 0x1040)
+        name = import_dll.encode('ascii')+b'\0'
+        data[576:576+len(name)] = name
+    return bytes(data)
+
+
+@pytest.mark.skipif(not (ROOT/'out/beta-deps/python/python.exe').is_file(), reason='Prepare bundled beta dependencies first')
 def test_portable_beta_package_is_self_contained(tmp_path):
     import hashlib
     import zipfile
@@ -83,7 +102,7 @@ def test_portable_beta_package_is_self_contained(tmp_path):
     build = tmp_path / 'build'
     build.mkdir()
     for name in ('ch2k8.exe', 'rexruntime.dll', 'rexgpu-xenos.dll', 'ch2k8_asset_codec.dll'):
-        (build / name).write_bytes(b'test runtime')
+        (build / name).write_bytes(fake_pe())
     output = tmp_path / 'beta output'
     result = subprocess.run([shell, '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
         str(ROOT / 'tools/package_beta.ps1'), '-BuildDirectory', str(build),
