@@ -91,7 +91,7 @@ def fake_pe(import_dll=None):
     return bytes(data)
 
 
-@pytest.mark.skipif(not (ROOT/'out/beta-deps/python/python.exe').is_file(), reason='Prepare bundled beta dependencies first')
+@pytest.mark.skipif(not (ROOT/'port/out/build/win-amd64-vulkan/ch2k8_tools.exe').is_file(), reason='Build native asset tools first')
 def test_portable_beta_package_is_self_contained(tmp_path):
     import hashlib
     import zipfile
@@ -101,7 +101,7 @@ def test_portable_beta_package_is_self_contained(tmp_path):
         pytest.skip('Requires Windows PowerShell')
     build = tmp_path / 'build'
     build.mkdir()
-    for name in ('ch2k8.exe', 'rexruntime.dll', 'rexgpu-xenos.dll', 'ch2k8_asset_codec.dll'):
+    for name in ('ch2k8.exe', 'rexruntime.dll', 'rexgpu-xenos.dll', 'ch2k8_tools.exe'):
         (build / name).write_bytes(fake_pe())
     output = tmp_path / 'beta output'
     result = subprocess.run([shell, '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
@@ -128,5 +128,25 @@ def test_portable_beta_package_is_self_contained(tmp_path):
         assert hashlib.sha256((install / name).read_bytes()).hexdigest() == digest
     assert not list(install.rglob('*.xex'))
     assert not list(install.rglob('*.pdb'))
-    assert (install / 'tools/loose_assets.py').is_file()
+    assert (install / 'tools/verify_beta.ps1').is_file()
+    assert not list(install.rglob('*.py'))
+    assert not list(install.rglob('*python*'))
     assert (install / 'START HERE.md').is_file()
+
+
+def test_relative_paths_follow_powershell_location(tmp_path):
+    shell=shutil.which('powershell.exe')
+    if not shell:pytest.skip('Requires Windows PowerShell')
+    disc=tmp_path/'disc';disc.mkdir();(disc/'default.xex').write_bytes(b'fixture')
+    (tmp_path/'game.exe').write_bytes(b'fixture')
+    wrapper=tmp_path/'location.ps1'
+    wrapper.write_text("""param($Directory,$Launcher)
+$ErrorActionPreference = 'Stop'
+Set-Location -LiteralPath $Directory
+& $Launcher -ValidateOnly -GameData disc -Executable game.exe
+""",encoding='utf-8')
+    result=subprocess.run([shell,'-NoProfile','-ExecutionPolicy','Bypass','-File',str(wrapper),'-Directory',str(tmp_path),'-Launcher',str(ROOT/'tools/launch_ch2k8.ps1')],capture_output=True,text=True)
+    assert result.returncode==0,result.stderr
+    config=json.loads(result.stdout)
+    assert Path(config['executable'])==tmp_path/'game.exe'
+    assert f'--game_data_root={disc}' in config['arguments']

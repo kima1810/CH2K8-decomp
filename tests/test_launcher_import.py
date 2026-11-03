@@ -94,86 +94,53 @@ def test_cancel_and_failure_remove_only_owned_staging(tmp_path,monkeypatch):
     assert not output.exists() and not list(tmp_path.glob('.ch2k8-import-*'))
 
 
-@pytest.mark.skipif(not (ROOT/'out/beta-deps/python/python.exe').is_file(), reason='Prepare bundled beta dependencies first')
-def test_relocated_beta_imports_iso_through_real_powershell_launcher(tmp_path):
+@pytest.mark.skipif(not (ROOT/'port/out/build/win-amd64-vulkan/ch2k8_tools.exe').is_file(), reason='Build native asset tools first')
+def test_relocated_beta_has_no_interpreter_and_runs_native_tools(tmp_path):
     import zipfile
     shell=shutil.which('powershell.exe')
     if not shell:pytest.skip('Requires Windows PowerShell')
     build=tmp_path/'build';build.mkdir()
-    # The fixture has no compressed streams; omit the fake codec after checking
-    # package contents so the real importer uses its standard-library fallback.
-    for name in ('ch2k8.exe','rexruntime.dll','rexgpu-xenos.dll','ch2k8_asset_codec.dll'):
+    for name in ('ch2k8.exe','rexruntime.dll','rexgpu-xenos.dll'):
         (build/name).write_bytes(fake_pe())
+    shutil.copy2(ROOT/'port/out/build/win-amd64-vulkan/ch2k8_tools.exe',build/'ch2k8_tools.exe')
     result=subprocess.run([shell,'-NoProfile','-ExecutionPolicy','Bypass','-File',str(ROOT/'tools/package_beta.ps1'),
         '-BuildDirectory',str(build),'-OutputDirectory',str(tmp_path/'packages')],capture_output=True,text=True)
     assert result.returncode==0,result.stderr
     archive,=(tmp_path/'packages').glob('*.zip')
-    with zipfile.ZipFile(archive) as bundle:bundle.extractall(tmp_path/'moved beta é [test]')
-    install,=(tmp_path/'moved beta é [test]').iterdir()
-    for name in ('xbox_disc_source.py','direct_folder.py','materialize_paired.py','prepare_direct_assets.py','xbox_asset_edits.py'):
-        assert (install/'tools'/name).is_file()
-    (install/'ch2k8_asset_codec.dll').unlink()
-    worker=install/'tools/launcher_import.py'
-    worker.write_text(worker.read_text().replace('71e8983d1cc009e485696aad19b5fa4b4661761870e2c8972717b932c1e4be36',hashlib.sha256(b'XEX2 fixture').hexdigest()))
-    environment=dict(os.environ,PATH=str(Path(os.environ['SystemRoot'])/'System32'),PYTHONPATH='Z:/not-a-real-module-path',PYTHONHOME='Z:/not-a-real-python-home')
+    with zipfile.ZipFile(archive) as bundle:bundle.extractall(tmp_path/'moved beta \u00e9 [test]')
+    install,=(tmp_path/'moved beta \u00e9 [test]').iterdir()
+    assert not list(install.rglob('*.py')) and not list(install.rglob('*python*'))
+    environment=dict(os.environ,PATH=str(Path(os.environ['SystemRoot'])/'System32'),PYTHONHOME='Z:/bad',PYTHONPATH='Z:/bad')
+    tool=install/'ch2k8_tools.exe'
+    result=subprocess.run([str(tool),'version'],capture_output=True,text=True,env=environment)
+    assert result.returncode==0,result.stderr
+    assert json.loads(result.stdout)['python_required'] is False
     image=make_iso(tmp_path)
     destination=tmp_path/'new loose game'
-    command=[shell,'-NoProfile','-ExecutionPolicy','Bypass','-File',str(install/'tools/launch_ch2k8.ps1'),
-        '-ImportIso',str(image),'-InstallDirectory',str(destination)]
-    result=subprocess.run(command,capture_output=True,text=True,env=environment)
-    assert result.returncode==0,result.stdout+result.stderr
+    result=subprocess.run([str(tool),'import',str(image),str(destination),'--expected-xex-sha256',hashlib.sha256(b'XEX2 fixture').hexdigest()],capture_output=True,text=True,env=environment)
+    assert result.returncode==0,result.stderr
     assert Path(json.loads(result.stdout)['game_data'])==destination
-    assert json.loads((destination/'assets.json').read_text())['storage']=='loose-resources'
-    validation=subprocess.run([shell,'-NoProfile','-ExecutionPolicy','Bypass','-File',str(install/'tools/launch_ch2k8.ps1'),
-        '-ValidateOnly','-GameData',str(destination)],capture_output=True,text=True)
-    assert validation.returncode==0,validation.stderr
-    assert f'--game_data_root={destination}' in json.loads(validation.stdout)['arguments']
-    repeated=subprocess.run(command,capture_output=True,text=True,env=environment)
-    assert repeated.returncode!=0 and 'never overwritten' in repeated.stderr
-    # Exercise the real modal progress dialog and its timer-driven completion.
+    # The launcher invokes the native worker and refuses an unsupported image
+    # before publishing a destination. Its supported identity stays fixed.
+    rejected=tmp_path/'unsupported'
+    result=subprocess.run([shell,'-NoProfile','-ExecutionPolicy','Bypass','-File',str(install/'tools/launch_ch2k8.ps1'),
+        '-ImportIso',str(image),'-InstallDirectory',str(rejected)],capture_output=True,text=True,env=environment)
+    assert result.returncode!=0 and 'Unsupported default.xex' in result.stderr
+    assert not rejected.exists()
+    # Exercise native preparation in the real modal launcher dialog.
     wrapper=tmp_path/'interactive.ps1'
-    wrapper.write_text('''param($Launcher, $Image, $Destination, $Disc, $Program)
+    wrapper.write_text("""param($Launcher,$Disc)
 $ErrorActionPreference = 'Stop'
-. $Launcher -ValidateOnly -GameData $Disc -Executable $Program | Out-Null
+. $Launcher -ValidateOnly -GameData $Disc | Out-Null
 Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
 $form = New-Object System.Windows.Forms.Form
-try { Import-Ch2k8Iso $Image $Destination -Interactive; Invoke-Ch2k8Preparation $Destination -Interactive }
-finally { $form.Dispose() }
-''')
-    interactive=tmp_path/'interactive loose game'
-    result=subprocess.run([shell,'-NoProfile','-ExecutionPolicy','Bypass','-File',str(wrapper),
-        '-Launcher',str(install/'tools/launch_ch2k8.ps1'),'-Image',str(image),
-        '-Destination',str(interactive),'-Disc',str(destination),'-Program',str(install/'ch2k8.exe')],
-        capture_output=True,text=True,env=environment,timeout=30)
-    assert result.returncode==0,result.stdout+result.stderr
-    assert (interactive/'assets.json').is_file()
-    # The actual process working directory must also be literal, not a wildcard.
-    start_wrapper=tmp_path/'start.ps1'
-    start_wrapper.write_text("""param($Launcher, $Disc, $Program)
-$ErrorActionPreference = 'Stop'
-. $Launcher -ValidateOnly -GameData $Disc -Executable $Program | Out-Null
-function Test-BetaEnvironment { param($Configuration); [pscustomobject]@{ready=$true} }
-$configuration = [pscustomobject]@{ executable=$Program; arguments=@('-c', 'import sys; sys.exit(0)', "--game_data_root=$Disc") }
-# This fixture has assets.json: avoid invoking preparation in the launch-only test.
-Rename-Item -LiteralPath (Join-Path $Disc 'assets.json') -NewName 'fixture-assets.json'
-try {
-    $process = Start-Ch2k8 $configuration -Background
-    $process.WaitForExit()
-    if ($process.ExitCode -ne 0) { throw 'Child process failed' }
-} finally { Rename-Item -LiteralPath (Join-Path $Disc 'fixture-assets.json') -NewName 'assets.json' }
+try { Invoke-Ch2k8Preparation $Disc -Interactive } finally { $form.Dispose() }
 """,encoding='utf-8')
-    result=subprocess.run([shell,'-NoProfile','-ExecutionPolicy','Bypass','-File',str(start_wrapper),
-        '-Launcher',str(install/'tools/launch_ch2k8.ps1'),'-Disc',str(destination),
-        '-Program',str(install/'python/python.exe')],capture_output=True,text=True,env=environment,timeout=30)
+    result=subprocess.run([shell,'-NoProfile','-ExecutionPolicy','Bypass','-File',str(wrapper),'-Launcher',str(install/'tools/launch_ch2k8.ps1'),'-Disc',str(destination)],capture_output=True,text=True,env=environment,timeout=30)
     assert result.returncode==0,result.stdout+result.stderr
     report=install/'tester report [1].zip'
-    result=subprocess.run([shell,'-NoProfile','-ExecutionPolicy','Bypass','-File',str(install/'tools/launch_ch2k8.ps1'),
-        '-GameData',str(destination),'-ReportOutput',str(report)],capture_output=True,text=True,env=environment,timeout=30)
-    assert result.returncode==1  # fixture binaries and invented XEX must fail preflight
-    assert report.is_file(),result.stdout+result.stderr
-
-
+    result=subprocess.run([shell,'-NoProfile','-ExecutionPolicy','Bypass','-File',str(install/'tools/launch_ch2k8.ps1'),'-GameData',str(destination),'-ReportOutput',str(report)],capture_output=True,text=True,env=environment,timeout=30)
+    assert result.returncode==1 and report.is_file(),result.stdout+result.stderr
 
 
 @pytest.mark.parametrize('base', [0, 0xFD90000, 0x2080000, 0x18300000])

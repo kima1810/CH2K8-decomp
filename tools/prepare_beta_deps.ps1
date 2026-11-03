@@ -3,20 +3,9 @@
 param([string]$CrtDirectory)
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Utility')
-Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Archive')
 $repo = Split-Path -Parent $PSScriptRoot
 $destination = Join-Path $repo 'out/beta-deps'
 $null = New-Item -ItemType Directory -Path $destination -Force
-$version = '3.14.10'
-$expected = '90905e64a840557d8c1bc4f5b74db3d7ee85e3ffb217611cac1c7813acea4159'
-$archive = Join-Path $destination "python-$version-embed-amd64.zip"
-if (-not (Test-Path -LiteralPath $archive)) {
-    Invoke-WebRequest -UseBasicParsing -Uri "https://www.python.org/ftp/python/$version/python-$version-embed-amd64.zip" -OutFile $archive
-}
-if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw 'Official Python archive checksum mismatch.' }
-$python = Join-Path $destination 'python'
-Expand-Archive -LiteralPath $archive -DestinationPath $python -Force
-'python314.zip', '.', '../tools' | Set-Content -LiteralPath (Join-Path $python 'python314._pth') -Encoding ASCII
 if (-not $CrtDirectory) {
     $candidates = Get-ChildItem 'C:/Program Files (x86)/Microsoft Visual Studio/*/BuildTools/VC/Redist/MSVC/*/x64/Microsoft.VC*.CRT' -Directory -ErrorAction SilentlyContinue | Sort-Object FullName -Descending
     if ($candidates) { $CrtDirectory = $candidates[0].FullName }

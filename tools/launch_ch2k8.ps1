@@ -35,34 +35,34 @@ function ConvertTo-NativeArgument([string]$Value) {
     # Escape trailing backslashes before the closing native quote.
     return '"' + ($Value -replace '(\\+)$', '$1$1') + '"'
 }
-function Get-AssetPython {
-    foreach ($candidate in @((Join-Path $repoRoot 'python/python.exe'), (Join-Path $repoRoot 'port/out/python-env/Scripts/python.exe'))) {
+function Get-AssetTool {
+    foreach ($candidate in @((Join-Path $repoRoot 'ch2k8_tools.exe'), (Join-Path $repoRoot 'port/out/build/win-amd64-vulkan/ch2k8_tools.exe'), (Join-Path $repoRoot 'port/out/build/win-amd64/ch2k8_tools.exe'), (Join-Path $repoRoot 'out/native-tools/ch2k8_tools.exe'))) {
         if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
     }
-    $command = Get-Command python.exe -ErrorAction SilentlyContinue
-    if ($command) { return $command.Source }
-    throw 'ISO import and folder assets need Python 3.11 or newer. Install Python with PATH enabled, then reopen the launcher.'
+    throw 'Native asset tools are missing. Extract the complete beta ZIP, or build the ch2k8_tools target from source.'
 }
 
 function Import-Ch2k8Iso {
     param([string]$Image, [string]$Destination, [switch]$Interactive)
     if (-not (Test-Path -LiteralPath $Image -PathType Leaf) -or [IO.Path]::GetExtension($Image) -ine '.iso') { throw 'Choose an Xbox 360 ISO file.' }
     if (-not $Destination -or (Test-Path -LiteralPath $Destination)) { throw 'Choose a new installation folder. Existing folders are never overwritten.' }
-    $python = Get-AssetPython
+    $Image = (Resolve-Path -LiteralPath $Image).Path
+    $Destination = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Destination)
+    $assetTool = Get-AssetTool
     $jobFolder = Join-Path $repoRoot ('port/userdata/imports/' + [guid]::NewGuid().ToString('N'))
     $null = New-Item -ItemType Directory -Path $jobFolder -Force
     $progressFile = Join-Path $jobFolder 'progress.json'
     $cancelFile = Join-Path $jobFolder 'cancel'
     $outputFile = Join-Path $jobFolder 'result.json'
     $errorFile = Join-Path $jobFolder 'import.log'
-    $parameters = @('-X', 'utf8', '-u', (Join-Path $repoRoot 'tools/launcher_import.py'), $Image, $Destination,
+    $parameters = @('import', $Image, $Destination,
         '--progress-file', $progressFile, '--cancel-file', $cancelFile)
     foreach ($argument in $parameters) { if ($argument.Contains('"')) { throw 'Paths must not contain double quotes.' } }
     $quoted = $parameters | ForEach-Object { ConvertTo-NativeArgument $_ }
     # Start-Process redirection treats brackets in paths as wildcards on PS 5.1.
     # .NET process streams keep Unicode and literal folder names intact.
     $startInfo = New-Object Diagnostics.ProcessStartInfo
-    $startInfo.FileName = $python
+    $startInfo.FileName = $assetTool
     $startInfo.Arguments = $quoted -join ' '
     $startInfo.UseShellExecute = $false
     $startInfo.CreateNoWindow = $true
@@ -153,8 +153,8 @@ function Get-LaunchConfiguration {
     if (-not $AllowMissing -and -not (Test-Path -LiteralPath (Join-Path $Data 'default.xex') -PathType Leaf)) {
         throw 'Choose the extracted Xbox 360 game folder containing default.xex.'
     }
-    $Program = [IO.Path]::GetFullPath($Program)
-    $Data = [IO.Path]::GetFullPath($Data)
+    $Program = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Program)
+    $Data = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Data)
     $userData = Join-Path $repoRoot 'port/userdata'
     $arguments = @('--gpu_plugin=xenos', "--ch2k8_renderer=$Backend",
         "--game_data_root=$Data", "--user_data_root=$userData",
@@ -182,10 +182,10 @@ function Get-LaunchConfiguration {
 
 function Invoke-Ch2k8Preparation {
     param([string]$AssetRoot, [switch]$Interactive)
-    $python = Get-AssetPython
+    $assetTool = Get-AssetTool
     $info = New-Object Diagnostics.ProcessStartInfo
-    $info.FileName = $python
-    $info.Arguments = (@('-X', 'utf8', (Join-Path $repoRoot 'tools/loose_assets.py'), 'prepare', $AssetRoot) | ForEach-Object { ConvertTo-NativeArgument $_ }) -join ' '
+    $info.FileName = $assetTool
+    $info.Arguments = (@('prepare', $AssetRoot) | ForEach-Object { ConvertTo-NativeArgument $_ }) -join ' '
     $info.UseShellExecute = $false
     $info.CreateNoWindow = $true
     $info.RedirectStandardOutput = $true
@@ -369,7 +369,7 @@ $import = New-Object System.Windows.Forms.Button
 $import.Text = 'Import ISO...'
 $import.SetBounds(24, 410, 170, 34)
 $form.Controls.Add($import)
-$importHint = Add-Label 'Extracts into editable loose assets. Python is included in the beta ZIP.' 208 414 382
+$importHint = Add-Label 'Extracts into editable loose assets using the included native tools.' 208 414 382
 $importHint.Height = 42
 $importHint.ForeColor = [System.Drawing.Color]::Silver
 $import.Add_Click({

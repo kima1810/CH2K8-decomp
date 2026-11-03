@@ -1,5 +1,7 @@
 # ZMO beta 1 portability and ISO validation
 
+Historical dependency design: the bundled Python described here has been replaced by [native launcher tools](2026-11-02-native-launcher-tools.md). See BETA.md for current tester requirements.
+
 ## Changes
 
 The distributable now includes an isolated, hash-pinned Python 3.14.10 embeddable runtime, x64 Microsoft C++ CRT DLLs, the pinned SDL controller database and its license, all transitive asset-preparation modules, and third-party notices. No tester Python, PATH changes, compiler, SDK, developer checkout or first-run download is required. `prepare_beta_deps.ps1` prepares maintainer dependencies; `package_beta.ps1` rejects missing components, checksum mismatches, non-x64 binaries and unresolved non-system PE imports before creating a ZIP. Version metadata records the source revision, dirty state and actual runtime hashes.

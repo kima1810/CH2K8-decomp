@@ -1,4 +1,7 @@
-"""Verify a staged beta's inventory, x64 PE files and non-system DLL closure."""
+"""Developer reference for beta inventory/PE regression tests.
+
+Distributed packages use verify_beta.ps1 and do not ship this module.
+"""
 import argparse
 import hashlib
 import json
@@ -55,9 +58,8 @@ def verify(root):
     for path in root.rglob('*'):
         if path.is_file() and path != inventory and path.resolve() not in listed:
             raise ValueError(f'Unlisted package file: {path.relative_to(root)}')
-    for name in ('ch2k8.exe', 'rexruntime.dll', 'rexgpu-xenos.dll', 'ch2k8_asset_codec.dll',
-                 'python/python.exe', 'python/python314.dll', 'python/python314.zip',
-                 'tools/launch_ch2k8.ps1', 'tools/launcher_import.py', 'tools/beta_diagnostics.ps1', 'gamecontrollerdb.txt'):
+    for name in ('ch2k8.exe', 'rexruntime.dll', 'rexgpu-xenos.dll', 'ch2k8_tools.exe',
+                 'tools/launch_ch2k8.ps1', 'tools/verify_beta.ps1', 'tools/beta_diagnostics.ps1', 'gamecontrollerdb.txt'):
         if not (root/name).is_file(): raise ValueError(f'Missing beta component: {name}')
     binaries = []
     for path in sorted(root.rglob('*')):

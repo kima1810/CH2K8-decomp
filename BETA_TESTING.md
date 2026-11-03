@@ -26,7 +26,8 @@ Command-line checks from the extracted beta folder:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File tools/launch_ch2k8.ps1 -CheckSetup -GameData "C:/Games/CH2K8-assets"
 powershell -NoProfile -ExecutionPolicy Bypass -File tools/launch_ch2k8.ps1 -ReportOutput "C:/Reports/CH2K8-unique-report.zip" -GameData "C:/Games/CH2K8-assets"
-python/python.exe tools/launcher_import.py "C:/Games/CH2K8.iso" --inspect
+.\ch2k8_tools.exe inspect "C:/Games/CH2K8.iso"
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/verify_beta.ps1 -Root .
 ```
 
 CheckSetup returns JSON and exit code 1 for failed preflight. ReportOutput still writes the report when preflight fails, then returns 1. Existing report files and installation destinations are not overwritten. No report is uploaded automatically.

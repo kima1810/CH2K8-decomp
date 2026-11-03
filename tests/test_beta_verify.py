@@ -16,9 +16,8 @@ def inventory(root):
 
 
 def test_verifier_detects_missing_transitive_dll_and_tampering(tmp_path):
-    for name in ('ch2k8.exe', 'rexruntime.dll', 'rexgpu-xenos.dll', 'ch2k8_asset_codec.dll',
-                 'python/python.exe', 'python/python314.dll', 'python/python314.zip',
-                 'tools/launch_ch2k8.ps1', 'tools/launcher_import.py', 'tools/beta_diagnostics.ps1', 'gamecontrollerdb.txt'):
+    for name in ('ch2k8.exe', 'rexruntime.dll', 'rexgpu-xenos.dll', 'ch2k8_tools.exe',
+                 'tools/launch_ch2k8.ps1', 'tools/verify_beta.ps1', 'tools/beta_diagnostics.ps1', 'gamecontrollerdb.txt'):
         path = tmp_path/name
         path.parent.mkdir(parents=True,exist_ok=True)
         path.write_bytes(fake_pe())

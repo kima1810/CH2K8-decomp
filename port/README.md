@@ -1,4 +1,4 @@
-For beta installation and portable packaging, see [BETA.md](../BETA.md).
+For beta installation and portable packaging, see [BETA.md](../BETA.md). The distributed launcher uses native `ch2k8_tools.exe` for ISO import and loose asset preparation; no Python interpreter is shipped or required. Python below is developer build/research tooling.
 
 # Building the Xbox 360 recompilation
 

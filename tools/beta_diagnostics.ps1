@@ -42,9 +42,9 @@ function Test-BetaEnvironment {
         }
         if ($Configuration.arguments -contains '--ch2k8_renderer=vulkan') { $failures.Add('Imported folder assets require Direct3D 12.') }
         try {
-            $python = Get-AssetPython
-            $probeOutput = & $python -X utf8 -c 'import sys; sys.path.insert(0,sys.argv[1]); import loose_assets,direct_folder,materialize_paired,prepare_direct_assets,xbox_asset_edits; sys.exit(0 if sys.version_info >= (3,11) else 1)' (Join-Path $repoRoot 'tools') 2>&1
-            if ($LASTEXITCODE -ne 0) { throw 'Python modules or native asset codec could not load.' }
+            $assetTool = Get-AssetTool
+            $probeOutput = & $assetTool version 2>&1
+            if ($LASTEXITCODE -ne 0) { throw 'Native asset tools could not start. Extract the complete beta ZIP.' }
         } catch { $failures.Add("Asset tools unavailable: $($_.Exception.Message)") }
     }
     if ($xexHash -and -not (Test-Path -LiteralPath (Join-Path $data 'assets.json'))) {
@@ -89,6 +89,7 @@ function Export-BetaReport {
     param([string]$Destination, $Configuration, $Setup, [string]$Notes = '')
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     if (-not $Destination) { throw 'Choose a report ZIP destination.' }
+    $Destination = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Destination)
     if (Test-Path -LiteralPath $Destination) { throw 'Report already exists. Choose a new filename.' }
     $reports = Join-Path $repoRoot 'port/userdata/reports'
     $stage = Join-Path $reports ([guid]::NewGuid().ToString('N'))
@@ -129,7 +130,7 @@ function Export-BetaReport {
     $versionFile = Join-Path $repoRoot 'beta-version.json'
     if (Test-Path -LiteralPath $versionFile) { $version = Get-Content -LiteralPath $versionFile -Raw | ConvertFrom-Json }
     $hashes = @{}
-    foreach ($name in @('ch2k8.exe', 'rexruntime.dll', 'rexgpu-xenos.dll', 'ch2k8_asset_codec.dll')) {
+    foreach ($name in @('ch2k8.exe', 'rexruntime.dll', 'rexgpu-xenos.dll', 'ch2k8_tools.exe')) {
         $file = Join-Path (Split-Path -Parent $Configuration.executable) $name
         if (Test-Path -LiteralPath $file) { $hashes[$name] = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant() }
     }

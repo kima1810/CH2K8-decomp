@@ -1,4 +1,7 @@
-"""Transactional ISO-to-loose-assets import for the portable launcher."""
+"""Developer reference implementation for native ISO-import regression tests.
+
+The distributed launcher invokes ch2k8_tools.exe; this module is not shipped.
+"""
 import argparse
 import contextlib
 import hashlib
