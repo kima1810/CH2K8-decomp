@@ -7,6 +7,7 @@ from prepare_native_shader_sdk import prepare_native_shaders
 from prepare_native_sync_sdk import prepare_sync
 from prepare_native_assets_sdk import prepare_native_assets
 from prepare_native_pcm_sdk import prepare_native_pcm
+from prepare_content_sdk import prepare_content
 
 PIN = 'bd833a2ab69d305f99ddf57418fc38ffec8af93d'
 
@@ -21,6 +22,7 @@ def prepare(source):
     prepare_sync(source)
     prepare_native_assets(source)
     prepare_native_pcm(source)
+    prepare_content(source)
     # Windows Git may check out symlinks as small text files. Materialize only
     # libmspack's tracked file links, using the target recorded in Git and
     # requiring both ends to remain inside that dependency.

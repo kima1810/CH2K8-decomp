@@ -35,6 +35,7 @@ def test_prepare_sdk_materializes_windows_links_and_forwards_refresh(tmp_path, m
     monkeypatch.setattr(sdk, 'prepare_sync', lambda source: None)
     monkeypatch.setattr(sdk, 'prepare_native_assets', lambda source: None)
     monkeypatch.setattr(sdk, 'prepare_native_pcm', lambda source: None)
+    monkeypatch.setattr(sdk, 'prepare_content', lambda source: None)
     sdk.prepare(tmp_path)
     assert link.read_bytes() == target.read_bytes()
     assert 'float(REXCVAR_GET(video_mode_refresh_rate))' in window.read_text()

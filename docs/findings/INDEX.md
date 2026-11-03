@@ -1,5 +1,7 @@
 # Findings index
 
+- [2026-11-02 Codegen and save review](2026-11-02-codegen-and-save-review.md): existing packed-vector/switch corrections verified; aggregate save enumeration avoids duplicate root visits; unknown buzzer-crash target remains unresolved.
+
 - [2026-11-01 Xbox folder assets and native DDS](2026-11-01-loose-xbox-assets.md): full archive reproduced from 3,378 asset folders, editable resource components, native D3D12 BC DDS replacements/upscales, exact hardware/WARP upload checks; packaged for user testing without launching the game.
 
 - [2026-11-01 Native pause-menu fix](2026-11-01-native-pause-fix.md): user validates responsive menus and no black flashes with native D3D12 plus bounded ownership extents, including normal 1440p borderless launch. Automatic now uses that configuration; ROV remains a compatibility fallback.
