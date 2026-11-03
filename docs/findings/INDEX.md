@@ -1,5 +1,7 @@
 # Findings index
 
+- [2026-11-03 Packed-vector lane order](2026-11-03-packed-vector-lane-order.md): new optimized-build profiling confirms three geometry routines remain hot; remove redundant pack/unpack lane reversals with bit-exact outputs. Local helpers improve 7–9%; whole-game FPS benefit remains unestablished.
+
 - [2026-11-03 Native presentation and Release build](2026-11-03-native-presentation-and-release-build.md): detect false-success VBlank waits instead of flooding host presentation; restore explicit optimized Release flags. Visible native-target samples improve from 622 ms to 26.5 ms median guest submissions with unchanged visual settings; older-hardware and consistent-60-FPS validation remain open.
 
 - [2026-11-03 Geometry and shader constants](2026-11-03-native-geometry-and-constants.md): exact draw-state specialization removes vertex/index compatibility branches; SIMD/bitset bookkeeping reduces local constant-update costs. Full EDRAM replay remains byte-identical, while controlled GPU time is effectively unchanged.
