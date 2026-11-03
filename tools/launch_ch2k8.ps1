@@ -19,7 +19,19 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $settingsPath = Join-Path $repoRoot 'port/userdata/launcher.json'
-if (-not $GameData) { $GameData = Join-Path $repoRoot 'work/ch2k8/XBOX/disc' }
+if (-not $GameData) {
+    $GameData = if (Test-Path -LiteralPath (Join-Path $repoRoot 'default.xex')) { $repoRoot }
+        elseif (Test-Path -LiteralPath (Join-Path $repoRoot 'game/default.xex')) { Join-Path $repoRoot 'game' }
+        else { Join-Path $repoRoot 'work/ch2k8/XBOX/disc' }
+}
+function Get-AssetPython {
+    foreach ($candidate in @((Join-Path $repoRoot 'python/python.exe'), (Join-Path $repoRoot 'port/out/python-env/Scripts/python.exe'))) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
+    }
+    $command = Get-Command python.exe -ErrorAction SilentlyContinue
+    if ($command) { return $command.Source }
+    throw 'Folder assets need Python 3.11 or newer. Install Python with PATH enabled, then reopen the launcher.'
+}
 
 function Get-LaunchConfiguration {
     param([string]$Backend, [string]$Size, [int]$Hertz, [string]$Mode, [string]$Data, [string]$Program, [string]$Path = 'auto')
@@ -31,12 +43,13 @@ function Get-LaunchConfiguration {
     if ($Hertz -lt 24 -or $Hertz -gt 240) { throw 'Refresh rate must be between 24 and 240 Hz.' }
     if ($Mode -notin @('windowed', 'borderless', 'exclusive')) { throw 'Choose a window mode.' }
     if (-not $Program) {
+        $portableBuild = Join-Path $repoRoot 'ch2k8.exe'
         $dualBuild = Join-Path $repoRoot 'port/out/build/win-amd64-vulkan/ch2k8.exe'
         $preset = if ($Backend -eq 'vulkan' -or (Test-Path -LiteralPath $dualBuild)) { 'win-amd64-vulkan' } else { 'win-amd64' }
-        $Program = Join-Path $repoRoot "port/out/build/$preset/ch2k8.exe"
+        $Program = if (Test-Path -LiteralPath $portableBuild -PathType Leaf) { $portableBuild } else { Join-Path $repoRoot "port/out/build/$preset/ch2k8.exe" }
     }
     if (-not (Test-Path -LiteralPath $Program -PathType Leaf)) {
-        throw "Game build is missing: $Program. See port/README.md for build instructions."
+        throw "Game build is missing: $Program. Extract the complete beta ZIP first, or see port/README.md to build from source."
     }
     if (-not (Test-Path -LiteralPath (Join-Path $Data 'default.xex') -PathType Leaf)) {
         throw 'Choose the extracted Xbox 360 game folder containing default.xex.'
@@ -77,8 +90,9 @@ function Start-Ch2k8 {
         if ($Configuration.arguments -contains '--ch2k8_renderer=vulkan') {
             throw 'Native DDS replacement currently requires Direct3D 12. Choose D3D12 for the folder installation.'
         }
-        $python = Join-Path $repoRoot 'port/out/python-env/Scripts/python.exe'
-        if (-not (Test-Path -LiteralPath $python)) { throw 'Asset preparation needs the project Python environment. See port/README.md.' }
+        $python = Get-AssetPython
+        & $python -c 'import sys; sys.exit(0 if sys.version_info >= (3,11) else 1)'
+        if ($LASTEXITCODE -ne 0) { throw 'Folder assets require Python 3.11 or newer.' }
         & $python (Join-Path $repoRoot 'tools/loose_assets.py') prepare $assetRoot
         if ($LASTEXITCODE -ne 0) { throw 'Loose asset validation failed. The game was not started.' }
     }
@@ -109,8 +123,8 @@ try {
 } catch { Write-Verbose "Ignoring invalid launcher settings: $_" }
 
 $form = New-Object System.Windows.Forms.Form
-$form.Text = 'College Hoops 2K8'
-$form.ClientSize = New-Object System.Drawing.Size(620, 514)
+$form.Text = 'College Hoops 2K8 - ZMO beta 1'
+$form.ClientSize = New-Object System.Drawing.Size(620, 610)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedDialog'
 $form.MaximizeBox = $false
@@ -180,11 +194,59 @@ $browse.Add_Click({
 })
 $play = New-Object System.Windows.Forms.Button
 $play.Text = 'Launch game'
-$play.Location = New-Object System.Drawing.Point(392, 438)
+$play.Location = New-Object System.Drawing.Point(392, 538)
 $play.Size = New-Object System.Drawing.Size(194, 46)
 $play.FlatStyle = 'Flat'
 $play.BackColor = [System.Drawing.Color]::FromArgb(164, 43, 49)
 $form.Controls.Add($play)
+$status = Add-Label 'Select your extracted Xbox 360 game folder, then check setup.' 24 414 562
+$status.Height = 62
+$status.ForeColor = [System.Drawing.Color]::Silver
+$check = New-Object System.Windows.Forms.Button
+$check.Text = 'Check setup'
+$check.Location = New-Object System.Drawing.Point(24, 486)
+$check.Size = New-Object System.Drawing.Size(170, 34)
+$form.Controls.Add($check)
+$check.Add_Click({
+    try {
+        $configuration = Get-LaunchConfiguration @('d3d12', 'vulkan')[$backend.SelectedIndex] ([string]$size.SelectedItem) ([int]$rate.Value) @('windowed', 'borderless', 'exclusive')[$mode.SelectedIndex] $dataBox.Text $Executable @('auto', 'native', 'accurate')[$renderMode.SelectedIndex]
+        foreach ($dll in @('rexruntime.dll', 'rexgpu-xenos.dll')) {
+            if (-not (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $configuration.executable) $dll))) { throw "Missing $dll. Extract the complete beta package again." }
+        }
+        if (Test-Path -LiteralPath (Join-Path $dataBox.Text 'assets.json')) {
+            if ($backend.SelectedIndex -eq 1) { throw 'Folder assets require Direct3D 12.' }
+            $python = Get-AssetPython
+            & $python -c 'import sys; sys.exit(0 if sys.version_info >= (3,11) else 1)'
+            if ($LASTEXITCODE -ne 0) { throw 'Folder assets require Python 3.11 or newer.' }
+        }
+        $status.Text = 'Setup looks ready. Launch will validate any folder asset edits. First startup may take longer while shaders compile.'
+    } catch { $status.Text = $_.Exception.Message }
+})
+$files = New-Object System.Windows.Forms.Button
+$files.Text = 'Saves / settings'
+$files.Location = New-Object System.Drawing.Point(210, 486)
+$files.Size = New-Object System.Drawing.Size(170, 34)
+$form.Controls.Add($files)
+$files.Add_Click({
+    try {
+        $folder = Join-Path $repoRoot 'port/userdata'
+        $null = New-Item -ItemType Directory -Path $folder -Force
+        Start-Process explorer.exe -ArgumentList ('"' + $folder + '"')
+    } catch { $status.Text = $_.Exception.Message }
+})
+$logs = New-Object System.Windows.Forms.Button
+$logs.Text = 'Open logs'
+$logs.Location = New-Object System.Drawing.Point(396, 486)
+$logs.Size = New-Object System.Drawing.Size(190, 34)
+$form.Controls.Add($logs)
+$logs.Add_Click({
+    try {
+        $configuration = Get-LaunchConfiguration @('d3d12', 'vulkan')[$backend.SelectedIndex] ([string]$size.SelectedItem) ([int]$rate.Value) @('windowed', 'borderless', 'exclusive')[$mode.SelectedIndex] $dataBox.Text $Executable
+        $folder = Join-Path (Split-Path -Parent $configuration.executable) 'logs'
+        $null = New-Item -ItemType Directory -Path $folder -Force
+        Start-Process explorer.exe -ArgumentList ('"' + $folder + '"')
+    } catch { $status.Text = $_.Exception.Message }
+})
 $form.AcceptButton = $play
 $play.Add_Click({
     try {
@@ -205,6 +267,7 @@ $play.Add_Click({
 if ($PreviewOutput) {
     $form.Show()
     [System.Windows.Forms.Application]::DoEvents()
+    $check.PerformClick()
     $form.Refresh()
     $bitmap = New-Object System.Drawing.Bitmap($form.Width, $form.Height)
     $form.DrawToBitmap($bitmap, (New-Object System.Drawing.Rectangle(0, 0, $form.Width, $form.Height)))

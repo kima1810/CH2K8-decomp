@@ -18,7 +18,7 @@ from ch2k8_archive import open_archive, load_names
 from xbox_texture import export_dds, apply_dds, describe
 
 _codec = None
-for _path in [Path(__file__).resolve().parents[1]/'port/out/build/win-amd64-vulkan/ch2k8_asset_codec.dll']:
+for _path in [Path(__file__).resolve().parents[1]/'ch2k8_asset_codec.dll', Path(__file__).resolve().parents[1]/'port/out/build/win-amd64-vulkan/ch2k8_asset_codec.dll']:
     if _path.is_file():
         _codec=ctypes.CDLL(str(_path))
         _codec.ch2k8_h7a.argtypes=[ctypes.c_void_p,ctypes.c_size_t,ctypes.c_void_p,ctypes.c_size_t]

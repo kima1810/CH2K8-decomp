@@ -71,3 +71,43 @@ def test_launcher_selects_native_or_accurate_targets(tmp_path, backend, path, ta
     synchronous='--no-async_shader_compilation' in arguments
     assert bounded == (backend=='d3d12' and path=='native')
     assert synchronous == bounded
+
+
+def test_portable_beta_package_is_self_contained(tmp_path):
+    import hashlib
+    import zipfile
+
+    shell = shutil.which('powershell.exe')
+    if not shell:
+        pytest.skip('Requires Windows PowerShell')
+    build = tmp_path / 'build'
+    build.mkdir()
+    for name in ('ch2k8.exe', 'rexruntime.dll', 'rexgpu-xenos.dll', 'ch2k8_asset_codec.dll'):
+        (build / name).write_bytes(b'test runtime')
+    output = tmp_path / 'beta output'
+    result = subprocess.run([shell, '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+        str(ROOT / 'tools/package_beta.ps1'), '-BuildDirectory', str(build),
+        '-OutputDirectory', str(output)], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    archive, = output.glob('*.zip')
+    moved = tmp_path / 'installation with spaces'
+    with zipfile.ZipFile(archive) as bundle:
+        bundle.extractall(moved)
+    install, = moved.iterdir()
+    data = tmp_path / 'my disc'
+    data.mkdir()
+    (data / 'default.xex').write_bytes(b'private game data')
+    validation = subprocess.run([shell, '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+        str(install / 'tools/launch_ch2k8.ps1'), '-ValidateOnly', '-GameData', str(data)],
+        capture_output=True, text=True)
+    assert validation.returncode == 0, validation.stderr
+    config = json.loads(validation.stdout)
+    assert Path(config['executable']) == install / 'ch2k8.exe'
+    assert f'--user_data_root={install / "port/userdata"}' in config['arguments']
+    for entry in (install / 'SHA256SUMS.txt').read_text().splitlines():
+        digest, name = entry.split('  ', 1)
+        assert hashlib.sha256((install / name).read_bytes()).hexdigest() == digest
+    assert not list(install.rglob('*.xex'))
+    assert not list(install.rglob('*.pdb'))
+    assert (install / 'tools/loose_assets.py').is_file()
+    assert (install / 'START HERE.md').is_file()

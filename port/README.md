@@ -1,3 +1,5 @@
+For beta installation and portable packaging, see [BETA.md](../BETA.md).
+
 # Building the Xbox 360 recompilation
 
 Folder-based Xbox installations, editable SCNE/ROST components and native D3D12
