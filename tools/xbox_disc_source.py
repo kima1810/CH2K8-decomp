@@ -34,7 +34,9 @@ class XboxISO:
         f,base,root,size=open_image(image)
         try:
             for name,sector,length,attributes in walk(f,base,root,size):
-                if not attributes&ATTR_DIR:self.members[name.casefold()]=(base+sector*SECTOR,length)
+                if not attributes&ATTR_DIR:
+                    if name.casefold() in self.members:raise ValueError('Duplicate Xbox ISO member')
+                    self.members[name.casefold()]=(base+sector*SECTOR,length)
         finally:f.close()
         if 'default.xex' not in self.members or '0a' not in self.members:raise ValueError('Xbox game ISO lacks default.xex/0A')
     def __truediv__(self,name):return ISOMember(self,name)

@@ -1,13 +1,21 @@
-# College Hoops 2K8 — ZMO beta 1
+# College Hoops 2K8 â€” ZMO beta 1
 
 ## Install and play (Windows x64)
 
 1. Extract the entire beta ZIP into a folder you can write to, such as Documents/CH2K8. Avoid Program Files. Keep the executable, DLLs and tools together.
-2. Supply your own USA Xbox 360 game data. An extracted disc folder must contain `default.xex`. No game files are included in the beta download.
-3. Double-click **Launch CH2K8.cmd**, click **Browse**, and select that folder. Click **Check setup**, then **Launch game**.
+2. Supply your own USA Xbox 360 game data. No game files are included in the beta download.
+3. Double-click **Launch CH2K8.cmd**. For an ISO, click **Import ISO...**, select the ISO, then choose a parent folder for the new installation. The launcher creates `<ISO name>-assets`, extracts editable loose resources, and selects it when finished. Allow several minutes and enough free space for decoded assets. Progress and cancellation are available; the original ISO is unchanged. Existing destinations are never overwritten. Later launches reuse the extracted folder. If you already have a game folder containing `default.xex`, use **Browse...** instead. Click **Check setup**, then **Launch game**.
 4. Start with Direct3D 12, Automatic, 1280x720, 60 Hz, Windowed. Increase resolution or choose borderless after checking gameplay. Accurate Xbox blending is the slower compatibility option. Vulkan remains experimental; folder asset replacements require D3D12.
 
-No compiler or SDK is needed for a prebuilt beta. Extracted disc installations do not need Python. Editable folder installations (`assets.json`) require Python 3.11+ available as `python.exe` on PATH; their edits are validated/prepared before launch. Launching a loose folder does not import an ISO. Source users can import with `python tools/loose_assets.py import "PATH/TO/GAME.iso" "PATH/TO/NEW FOLDER"`; existing destinations are refused.
+No compiler or SDK is needed for a prebuilt beta. ISO import and editable folder installations (`assets.json`) require Python 3.11+ available as `python.exe` on PATH; their edits are validated/prepared before launch. Ordinary extracted disc installations do not need Python. The ISO is converted into the loose folder system, rather than mounted directly. Failed or cancelled imports discard their temporary extraction and leave existing installations untouched. Import logs are saved in `port/userdata/imports`.
+
+Command-line import is also available from the beta folder:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/launch_ch2k8.ps1 -ImportIso "D:\Games\College Hoops 2K8.iso" -InstallDirectory "D:\Games\CH2K8-assets"
+```
+
+Add `-Launch` to start the game after a successful import. Source users can also use `python tools/loose_assets.py import "PATH/TO/GAME.iso" "PATH/TO/NEW FOLDER"`; existing destinations are refused.
 
 Settings and saves stay in `port/userdata` beside the launcher. **Saves / settings** opens that folder; back it up before updating. Extract updates to a new folder, then copy your userdata into the same location. Keep game data separately and select it again. Remove the beta folder to uninstall after backing up saves; your separately stored game data remains available.
 

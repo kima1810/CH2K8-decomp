@@ -11,6 +11,8 @@ param(
     [ValidateRange(24, 240)][int]$RefreshRate = 60,
     [ValidateSet('windowed', 'borderless', 'exclusive')][string]$WindowMode = 'windowed',
     [string]$GameData,
+    [string]$ImportIso,
+    [string]$InstallDirectory,
     [string]$Executable,
     [string]$PreviewOutput,
     [switch]$Launch,
@@ -30,7 +32,79 @@ function Get-AssetPython {
     }
     $command = Get-Command python.exe -ErrorAction SilentlyContinue
     if ($command) { return $command.Source }
-    throw 'Folder assets need Python 3.11 or newer. Install Python with PATH enabled, then reopen the launcher.'
+    throw 'ISO import and folder assets need Python 3.11 or newer. Install Python with PATH enabled, then reopen the launcher.'
+}
+
+function Import-Ch2k8Iso {
+    param([string]$Image, [string]$Destination, [switch]$Interactive)
+    if (-not (Test-Path -LiteralPath $Image -PathType Leaf) -or [IO.Path]::GetExtension($Image) -ine '.iso') { throw 'Choose an Xbox 360 ISO file.' }
+    if (-not $Destination -or (Test-Path -LiteralPath $Destination)) { throw 'Choose a new installation folder. Existing folders are never overwritten.' }
+    $python = Get-AssetPython
+    $jobFolder = Join-Path $repoRoot ('port/userdata/imports/' + [guid]::NewGuid().ToString('N'))
+    $null = New-Item -ItemType Directory -Path $jobFolder -Force
+    $progressFile = Join-Path $jobFolder 'progress.json'
+    $cancelFile = Join-Path $jobFolder 'cancel'
+    $outputFile = Join-Path $jobFolder 'result.json'
+    $errorFile = Join-Path $jobFolder 'import.log'
+    $parameters = @('-u', (Join-Path $repoRoot 'tools/launcher_import.py'), $Image, $Destination,
+        '--progress-file', $progressFile, '--cancel-file', $cancelFile)
+    foreach ($argument in $parameters) { if ($argument.Contains('"')) { throw 'Paths must not contain double quotes.' } }
+    $quoted = $parameters | ForEach-Object { '"' + $_ + '"' }
+    $worker = Start-Process -FilePath $python -ArgumentList $quoted -WindowStyle Hidden -PassThru -RedirectStandardOutput $outputFile -RedirectStandardError $errorFile
+    # Retain the native handle before a short import can exit (Windows PS 5.1
+    # otherwise sometimes reports a null ExitCode after WaitForExit).
+    $null = $worker.Handle
+    if ($Interactive) {
+        $progressDialog = New-Object System.Windows.Forms.Form
+        $progressDialog.Text = 'Import Xbox ISO'
+        $progressDialog.ClientSize = New-Object System.Drawing.Size(520, 160)
+        $progressDialog.StartPosition = 'CenterParent'
+        $progressDialog.FormBorderStyle = 'FixedDialog'
+        $progressDialog.MaximizeBox = $false
+        $progressLabel = New-Object System.Windows.Forms.Label
+        $progressLabel.Text = 'Reading ISO. Extraction may take several minutes...'
+        $progressLabel.SetBounds(18, 18, 484, 50)
+        $progressDialog.Controls.Add($progressLabel)
+        $progressBar = New-Object System.Windows.Forms.ProgressBar
+        $progressBar.Style = 'Marquee'; $progressBar.SetBounds(18, 75, 484, 20)
+        $progressDialog.Controls.Add($progressBar)
+        $cancelButton = New-Object System.Windows.Forms.Button
+        $cancelButton.Text = 'Cancel'; $cancelButton.SetBounds(402, 112, 100, 30)
+        $progressDialog.Controls.Add($cancelButton)
+        $cancelButton.Add_Click({ $progressDialog.Close() })
+        $progressDialog.Add_FormClosing({
+            if (-not $worker.HasExited) {
+                $_.Cancel = $true
+                [IO.File]::WriteAllText($cancelFile, 'cancel')
+                $cancelButton.Enabled = $false
+                $progressLabel.Text = 'Cancelling after the current asset operation...'
+            }
+        })
+        $timer = New-Object System.Windows.Forms.Timer
+        $timer.Interval = 300
+        $timer.Add_Tick({
+            if ($worker.HasExited) { $timer.Stop(); $progressDialog.Close(); return }
+            if ((Test-Path -LiteralPath $progressFile) -and $cancelButton.Enabled) {
+                try {
+                    $update = Get-Content -LiteralPath $progressFile -Raw | ConvertFrom-Json
+                    $progressLabel.Text = [string]$update.message
+                    if ($update.total -gt 0) {
+                        $progressBar.Style = 'Continuous'
+                        $progressBar.Value = [Math]::Min(100, [int](100 * $update.done / $update.total))
+                    }
+                } catch { }
+            }
+        })
+        try { $timer.Start(); $null = $progressDialog.ShowDialog($form) }
+        finally { $timer.Stop(); $timer.Dispose(); $progressDialog.Dispose() }
+    }
+    $worker.WaitForExit()
+    if ($worker.ExitCode -ne 0) {
+        $detail = (Get-Content -LiteralPath $errorFile -Tail 8) -join [Environment]::NewLine
+        throw "ISO import failed. $detail"
+    }
+    $result = Get-Content -LiteralPath $outputFile -Raw | ConvertFrom-Json
+    return [string]$result.game_data
 }
 
 function Get-LaunchConfiguration {
@@ -100,6 +174,11 @@ function Start-Ch2k8 {
     Start-Process -FilePath $Configuration.executable -WorkingDirectory (Split-Path -Parent $Configuration.executable) -ArgumentList $nativeArguments -WindowStyle Normal -PassThru
 }
 
+if ($ImportIso) {
+    if ($ValidateOnly) { throw 'Use ImportIso without ValidateOnly to extract a new loose installation.' }
+    $GameData = Import-Ch2k8Iso $ImportIso $InstallDirectory
+    if (-not $Launch) { @{ game_data = $GameData; storage = 'loose-resources' } | ConvertTo-Json; return }
+}
 if ($Launch -or $ValidateOnly) {
     $configuration = Get-LaunchConfiguration $Renderer $Resolution $RefreshRate $WindowMode $GameData $Executable $RenderPath
     if ($ValidateOnly) { $configuration | ConvertTo-Json -Depth 3 }
@@ -124,7 +203,7 @@ try {
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'College Hoops 2K8 - ZMO beta 1'
-$form.ClientSize = New-Object System.Drawing.Size(620, 610)
+$form.ClientSize = New-Object System.Drawing.Size(620, 660)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedDialog'
 $form.MaximizeBox = $false
@@ -174,7 +253,7 @@ $renderMode.SelectedIndex = @('auto', 'native', 'accurate').IndexOf($RenderPath)
 $hint = Add-Label 'Automatic uses tested native D3D12 rendering. Accurate Xbox blending is the compatibility fallback; Vulkan native targets remain experimental.' 24 296 570
 $hint.ForeColor = [System.Drawing.Color]::Silver
 $hint.Height = 40
-$null = Add-Label 'Extracted game folder' 24 344 560
+$null = Add-Label 'Game folder (or import your Xbox ISO below)' 24 344 560
 $dataBox = New-Object System.Windows.Forms.TextBox
 $dataBox.Text = $GameData
 $dataBox.Location = New-Object System.Drawing.Point(24, 370)
@@ -192,19 +271,52 @@ $browse.Add_Click({
     if ($dialog.ShowDialog($form) -eq 'OK') { $dataBox.Text = $dialog.SelectedPath }
     $dialog.Dispose()
 })
+$import = New-Object System.Windows.Forms.Button
+$import.Text = 'Import ISO...'
+$import.SetBounds(24, 410, 170, 34)
+$form.Controls.Add($import)
+$importHint = Add-Label 'Extracts into editable loose assets. Python 3.11+ required.' 208 414 382
+$importHint.Height = 42
+$importHint.ForeColor = [System.Drawing.Color]::Silver
+$import.Add_Click({
+    $imageDialog = New-Object System.Windows.Forms.OpenFileDialog
+    $imageDialog.Title = 'Select your USA Xbox 360 College Hoops 2K8 ISO'
+    $imageDialog.Filter = 'Xbox 360 ISO (*.iso)|*.iso'
+    $destinationDialog = New-Object System.Windows.Forms.FolderBrowserDialog
+    try {
+        if ($imageDialog.ShowDialog($form) -ne 'OK') { return }
+        $folderName = [IO.Path]::GetFileNameWithoutExtension($imageDialog.FileName) + '-assets'
+        $destinationDialog.Description = "Choose where to create the new $folderName installation folder"
+        if ($destinationDialog.ShowDialog($form) -ne 'OK') { return }
+        $destination = Join-Path $destinationDialog.SelectedPath $folderName
+        $dataBox.Text = Import-Ch2k8Iso $imageDialog.FileName $destination -Interactive
+        $backend.SelectedIndex = 0
+        $null = New-Item -ItemType Directory -Path (Split-Path -Parent $settingsPath) -Force
+        # Preserve the display settings until Launch saves the full selection.
+        $savedSettings = @{}
+        if (Test-Path -LiteralPath $settingsPath) {
+            try { (Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json).PSObject.Properties | ForEach-Object { $savedSettings[$_.Name] = $_.Value } } catch { }
+        }
+        $savedSettings.game_data = $dataBox.Text
+        $savedSettings.renderer = 'd3d12'
+        $savedSettings | ConvertTo-Json | Set-Content -LiteralPath $settingsPath -Encoding utf8
+        $status.Text = 'ISO imported as loose assets. The original ISO is unchanged. Check setup, then launch.'
+    } catch { [System.Windows.Forms.MessageBox]::Show($form, $_.Exception.Message, 'ISO import', 'OK', 'Error') | Out-Null }
+    finally { $imageDialog.Dispose(); $destinationDialog.Dispose() }
+})
 $play = New-Object System.Windows.Forms.Button
 $play.Text = 'Launch game'
-$play.Location = New-Object System.Drawing.Point(392, 538)
+$play.Location = New-Object System.Drawing.Point(392, 588)
 $play.Size = New-Object System.Drawing.Size(194, 46)
 $play.FlatStyle = 'Flat'
 $play.BackColor = [System.Drawing.Color]::FromArgb(164, 43, 49)
 $form.Controls.Add($play)
-$status = Add-Label 'Select your extracted Xbox 360 game folder, then check setup.' 24 414 562
+$status = Add-Label 'Browse to a game folder or import an ISO, then check setup.' 24 464 562
 $status.Height = 62
 $status.ForeColor = [System.Drawing.Color]::Silver
 $check = New-Object System.Windows.Forms.Button
 $check.Text = 'Check setup'
-$check.Location = New-Object System.Drawing.Point(24, 486)
+$check.Location = New-Object System.Drawing.Point(24, 536)
 $check.Size = New-Object System.Drawing.Size(170, 34)
 $form.Controls.Add($check)
 $check.Add_Click({
@@ -224,7 +336,7 @@ $check.Add_Click({
 })
 $files = New-Object System.Windows.Forms.Button
 $files.Text = 'Saves / settings'
-$files.Location = New-Object System.Drawing.Point(210, 486)
+$files.Location = New-Object System.Drawing.Point(210, 536)
 $files.Size = New-Object System.Drawing.Size(170, 34)
 $form.Controls.Add($files)
 $files.Add_Click({
@@ -236,7 +348,7 @@ $files.Add_Click({
 })
 $logs = New-Object System.Windows.Forms.Button
 $logs.Text = 'Open logs'
-$logs.Location = New-Object System.Drawing.Point(396, 486)
+$logs.Location = New-Object System.Drawing.Point(396, 536)
 $logs.Size = New-Object System.Drawing.Size(190, 34)
 $form.Controls.Add($logs)
 $logs.Add_Click({

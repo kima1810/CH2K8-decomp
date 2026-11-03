@@ -224,7 +224,7 @@ def explode(data, folder, textures=True, preserve_packed=True):
     return layout
 
 
-def import_disc(source, output, textures=True, direct=False):
+def import_disc(source, output, textures=True, direct=False, progress=None):
     if output.exists():
         raise ValueError('output already exists; choose a new installation directory')
     if source.is_file():
@@ -251,6 +251,7 @@ def import_disc(source, output, textures=True, direct=False):
         manifest['storage']='loose-resources'
     cursor = 0
     for e in sorted(archive.entries,key=lambda e:e.offset):
+        if progress:progress(len(manifest['entries']),len(archive.entries))
         if e.offset < cursor:
             raise ValueError('overlapping archive entries')
         while not direct and cursor < e.offset:
@@ -282,10 +283,12 @@ def import_disc(source, output, textures=True, direct=False):
         cursor += n
     if direct:
         manifest.pop('segments');manifest.pop('parts')
+    if progress:progress(len(archive.entries),len(archive.entries))
     write_json(output/'assets.json',manifest)
     if direct:
         from materialize_paired import materialize
         materialize(output,keep_originals=False)
+    if progress:progress(len(archive.entries),len(archive.entries))
     if not direct:write_map(output,manifest)
     prepare(output)
     return manifest
@@ -608,7 +611,7 @@ def validate_dds(dds, original):
 def main():
     p=argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub=p.add_subparsers(dest='command',required=True)
-    imp=sub.add_parser('import',help='import an extracted Xbox disc to a new loose installation')
+    imp=sub.add_parser('import',help='import an Xbox ISO or extracted disc to a new loose installation')
     imp.add_argument('source',type=Path)
     imp.add_argument('output',type=Path)
     imp.add_argument('--no-textures',action='store_true',help='preserve all data but skip DDS export')

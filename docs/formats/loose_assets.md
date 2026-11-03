@@ -40,6 +40,15 @@ and preservation baseline, not PS3 artwork or PS3 texture conversion rules.
 
 ## Build/import
 
+The portable ZMO beta launcher now offers **Import ISO...**. It converts the
+selected ISO directly into a new `loose-resources` installation, including
+decoded components, supported DDS templates and runtime maps. It does not mount
+the ISO or stage the original archive chunks. Python 3.11+ is required. The
+launcher displays progress, supports cancellation between asset operations,
+and publishes the installation only after preparation succeeds. Failed imports
+remove only their own temporary directory. Existing destinations are refused;
+later launches use the completed folder without importing again.
+
 Build/install the patched source SDK with `tools/build_vulkan_sdk.ps1` and build
 the `win-amd64-vulkan` game preset (which supports D3D12 too). **Native DDS is
 currently D3D12-only.** The original Vulkan texture path remains available.
@@ -162,8 +171,9 @@ Removing this restriction needs additional asset-owner tracking.
 
 GPU-written/resolved ranges are excluded. Memory invalidation reevaluates identity
 and restores the original resource for a non-match. Old native resources/descriptors
-remain alive until fence-safe texture eviction; staging buffers expire after their
-submission completes. Invalid runtime DDS falls back with a logged error. Successful
+remain alive until their submission fence completes and are reclaimed on texture
+requests or normal cache teardown; staging buffers expire after their submission
+completes. Invalid runtime DDS falls back with a logged error. Successful
 uploads appear as `Native DDS upload` in the runtime log.
 
 `--ch2k8_native_dds=false` disables native substitution while retaining the folder

@@ -15,7 +15,8 @@ foreach ($name in $runtime) {
 $stage = Join-Path $OutputDirectory ('ZMO-beta1-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss-ffff'))
 $null = New-Item -ItemType Directory -Path (Join-Path $stage 'tools') -Force
 foreach ($name in $runtime) { Copy-Item -LiteralPath (Join-Path $BuildDirectory $name) -Destination $stage }
-foreach ($name in @('launch_ch2k8.ps1', 'loose_assets.py', 'ch2k8_archive.py', 'xbox_texture.py', 'xdvdfs.py')) {
+foreach ($name in @('launch_ch2k8.ps1', 'launcher_import.py', 'loose_assets.py', 'ch2k8_archive.py', 'xbox_texture.py', 'xdvdfs.py',
+    'xbox_disc_source.py', 'direct_folder.py', 'materialize_paired.py', 'prepare_direct_assets.py', 'xbox_asset_edits.py')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $stage 'tools')
 }
 Copy-Item -LiteralPath (Join-Path $repo 'Launch CH2K8.cmd') -Destination $stage
