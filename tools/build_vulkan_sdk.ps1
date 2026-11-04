@@ -3,9 +3,11 @@
 Build the pinned Windows SDK with native Vulkan and D3D12 in an isolated prefix.
 #>
 [CmdletBinding()]
-param([ValidateRange(1, 16)][int]$Jobs = 3)
+param([ValidateRange(1, 16)][int]$Jobs = 3, [string]$PythonExecutable, [switch]$SdkOnly)
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'build_support.ps1')
+$PythonExecutable = Find-BuildPython $PythonExecutable $repoRoot
 $source = Join-Path $repoRoot 'work/third_party/rexglue-vulkan'
 $build = Join-Path $repoRoot 'port/out/build/sdk-vulkan'
 $install = Join-Path $repoRoot 'port/sdk-vulkan'
@@ -28,7 +30,7 @@ if (-not $description) {
     git -C $source fetch --deepen=50 origin tag nightly-20261002-bd833a2a
     Check-Exit 'SDK version ancestry'
 }
-python (Join-Path $PSScriptRoot 'prepare_vulkan_sdk.py') $source
+& $PythonExecutable (Join-Path $PSScriptRoot 'prepare_vulkan_sdk.py') $source
 Check-Exit 'SDK preparation'
 cmake -S $source -B $build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DREXGLUE_USE_VULKAN=ON -DREXGLUE_USE_D3D12=ON -DREXGLUE_BUILD_TESTS=OFF -DCMAKE_EXPORT_NO_PACKAGE_REGISTRY=ON "-DCMAKE_INSTALL_PREFIX=$install"
 Check-Exit 'SDK configure'
@@ -36,6 +38,7 @@ cmake --build $build --parallel $Jobs
 Check-Exit 'SDK build'
 cmake --install $build --config Release
 Check-Exit 'SDK install'
+if ($SdkOnly) { return }
 Push-Location (Join-Path $repoRoot 'port')
 try {
     cmake --preset win-amd64-vulkan

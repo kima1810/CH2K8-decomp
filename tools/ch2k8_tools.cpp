@@ -135,16 +135,30 @@ int wmain(int argc, wchar_t **argv) {
     require(!pos.empty(), "Missing native tool command");
     J result;
     if (pos[0] == "version" || pos[0] == "--version")
-      result = {{"tool", "ch2k8_tools"},
-                {"version", 1},
-                {"python_required", false},
-                {"features", J::array({"iso", "direct-resources", "native-dds",
-                                       "native-pcm"})}};
+      result = {
+          {"tool", "ch2k8_tools"},
+          {"version", 1},
+          {"python_required", false},
+          {"features", J::array({"iso", "xex-extraction", "direct-resources",
+                                 "native-dds", "native-pcm"})}};
     else if (pos[0] == "inspect") {
       require(pos.size() == 2, "Usage: inspect ISO");
       Disc disc(path(pos[1]));
       Archive archive(disc);
       result = inspect(disc, archive, expected, job);
+    } else if (pos[0] == "extract-xex") {
+      require(pos.size() == 3, "Usage: extract-xex ISO OUTPUT.xex");
+      Disc disc(path(pos[1]));
+      Archive archive(disc);
+      result = inspect(disc, archive, expected, job);
+      auto output = fs::absolute(path(pos[2]));
+      if (fs::exists(output)) {
+        require(file_sha(output) == expected,
+                "Existing XEX differs; it was left untouched");
+      } else {
+        write(output, disc.member("default.xex", 0, disc.size("default.xex")));
+      }
+      result["xex"] = utf8(output);
     } else if (pos[0] == "import") {
       require(pos.size() == 3, "Usage: import ISO NEW_FOLDER");
       result = import_game(path(pos[1]), path(pos[2]), job, expected);

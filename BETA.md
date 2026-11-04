@@ -1,5 +1,7 @@
 # College Hoops 2K8 — ZMO beta 1
 
+Download the **runnable Windows ZIP under Assets** from [the beta release](https://github.com/kima1810/CH2K8-decomp/releases/tag/ZMO-beta1). GitHub's automatic **Source code (zip)** is a developer checkout; it contains no `ch2k8.exe` and cannot launch until compiled.
+
 ## Install and play (Windows x64)
 
 1. Extract the entire beta ZIP into a folder you can write to, such as Documents/CH2K8. Avoid Program Files. Keep the executable, DLLs and tools together.
@@ -44,3 +46,18 @@ To build only the launcher asset executable without the game SDK, game data or P
 cmake -S tools/native_assets -B out/native-tools -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build out/native-tools --parallel 3
 ```
+
+## Build from your XEX or ISO (source checkout)
+
+Open the source checkout's launcher and click **Build from XEX / ISO**, or run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/build_ch2k8.ps1 -Source "C:/Games/CH2K8/default.xex"
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/build_ch2k8.ps1 -Source "C:/Games/CH2K8.iso"
+```
+
+This builds the native helper, validates the supported USA XEX, stages a private code-generation input, prepares the pinned SDK when missing, generates the recompilation and builds `ch2k8.exe`. ISO builds also import editable disc assets. A standalone XEX supplies executable code; playing still requires the disc assets. Use **Select XEX...** for an already extracted disc with `default.xex` and archive parts beside it, or **Import ISO...** for the complete disc image.
+
+Source builds require Python 3.11+, Git, CMake 3.25+, Ninja, Clang 20+ and Microsoft C++ Build Tools with the Windows SDK. The resolver probes real interpreters, the `py -3` launcher, Python's registry installation entries and standard installation folders, skipping Windows Store execution aliases. If Python is installed somewhere else, pass `-PythonExecutable "C:/path/to/python.exe"`. `-ValidateOnly` reports the selected prerequisites without building; `-SdkDirectory` reuses a patched installed SDK; `-CodeOnly` skips ISO asset import for code-generation testing. Keep a minimum of several GB free on the build drive. First SDK/game builds can take 30 minutes or longer. UI build logs are under `port/userdata/builds`.
+
+The source build writes `port/userdata/build-result.json` and remembers the executable and game-data path for the next launcher session. The runnable release asset continues to use native tools and does not require Python, compilers, Git or an SDK.

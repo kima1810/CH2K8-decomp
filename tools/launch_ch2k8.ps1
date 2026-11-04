@@ -12,6 +12,8 @@ param(
     [ValidateSet('windowed', 'borderless', 'exclusive')][string]$WindowMode = 'windowed',
     [string]$GameData,
     [string]$ImportIso,
+    [string]$BuildSource,
+    [string]$PythonExecutable,
     [string]$InstallDirectory,
     [string]$Executable,
     [string]$PreviewOutput,
@@ -34,6 +36,42 @@ function ConvertTo-NativeArgument([string]$Value) {
     if ($Value.Contains('"')) { throw 'Paths must not contain double quotes.' }
     # Escape trailing backslashes before the closing native quote.
     return '"' + ($Value -replace '(\\+)$', '$1$1') + '"'
+}
+function Invoke-Ch2k8SourceBuild {
+    param([string]$InputSource, [switch]$Interactive)
+    $scriptPath=Join-Path $repoRoot 'tools/build_ch2k8.ps1'
+    if (-not (Test-Path -LiteralPath $scriptPath)) { throw 'Source compilation needs the full source checkout. Download it from the beta release page; the runnable ZIP already contains the compiled game.' }
+    $job=Join-Path $repoRoot ('port/userdata/builds/'+[guid]::NewGuid().ToString('N'))
+    $null=New-Item -ItemType Directory -Path $job -Force
+    $arguments=@('-NoProfile','-ExecutionPolicy','Bypass','-File',$scriptPath,'-Source',$InputSource,'-LogFile',(Join-Path $job 'build.log'))
+    if ($PythonExecutable) { $arguments+=@('-PythonExecutable',$PythonExecutable) }
+    $info=New-Object Diagnostics.ProcessStartInfo
+    $info.FileName=Join-Path $PSHOME 'powershell.exe'
+    $info.Arguments=($arguments|ForEach-Object{ConvertTo-NativeArgument $_}) -join ' '
+    $info.UseShellExecute=$false;$info.CreateNoWindow=$true
+    $info.RedirectStandardOutput=$true;$info.RedirectStandardError=$true
+    $worker=[Diagnostics.Process]::Start($info)
+    $stdout=$worker.StandardOutput.ReadToEndAsync();$stderr=$worker.StandardError.ReadToEndAsync()
+    try {
+        if ($Interactive) {
+            $dialog=New-Object System.Windows.Forms.Form
+            $dialog.Text='Build recompilation from XEX / ISO'
+            $dialog.ClientSize=New-Object Drawing.Size(560,180)
+            $dialog.StartPosition='CenterParent';$dialog.FormBorderStyle='FixedDialog';$dialog.ControlBox=$false
+            $label=New-Object System.Windows.Forms.Label
+            $label.Text="Building the supported USA recompilation. The first build may take 30 minutes or longer. Build prerequisites must be installed. Log: $(Join-Path $job 'build.log')"
+            $label.SetBounds(18,18,524,110);$dialog.Controls.Add($label)
+            $bar=New-Object System.Windows.Forms.ProgressBar;$bar.Style='Marquee';$bar.SetBounds(18,140,524,20);$dialog.Controls.Add($bar)
+            $timer=New-Object System.Windows.Forms.Timer;$timer.Interval=500
+            $timer.Add_Tick({if($worker.HasExited){$timer.Stop();$dialog.Close()}})
+            try{$timer.Start();$null=$dialog.ShowDialog($form)}finally{$timer.Stop();$timer.Dispose();$dialog.Dispose()}
+        }
+        $worker.WaitForExit()
+        [IO.File]::WriteAllText((Join-Path $job 'stdout.log'),$stdout.GetAwaiter().GetResult())
+        $errors=$stderr.GetAwaiter().GetResult();[IO.File]::WriteAllText((Join-Path $job 'stderr.log'),$errors)
+        if($worker.ExitCode -ne 0){throw "Source build failed. $errors Build log: $(Join-Path $job 'build.log')"}
+        return Get-Content -LiteralPath (Join-Path $repoRoot 'port/userdata/build-result.json') -Raw | ConvertFrom-Json
+    } finally {$worker.Dispose()}
 }
 function Get-AssetTool {
     foreach ($candidate in @((Join-Path $repoRoot 'ch2k8_tools.exe'), (Join-Path $repoRoot 'port/out/build/win-amd64-vulkan/ch2k8_tools.exe'), (Join-Path $repoRoot 'port/out/build/win-amd64/ch2k8_tools.exe'), (Join-Path $repoRoot 'out/native-tools/ch2k8_tools.exe'))) {
@@ -253,6 +291,15 @@ function Start-Ch2k8 {
     return [Diagnostics.Process]::Start($startInfo)
 }
 
+if ($BuildSource) {
+    if ($ValidateOnly) {
+        & (Join-Path $repoRoot 'tools/build_ch2k8.ps1') -Source $BuildSource -PythonExecutable $PythonExecutable -ValidateOnly
+        return
+    }
+    $result=Invoke-Ch2k8SourceBuild $BuildSource
+    $result|ConvertTo-Json
+    return
+}
 if ($ImportIso) {
     if ($ValidateOnly) { throw 'Use ImportIso without ValidateOnly to extract a new loose installation.' }
     $GameData = Import-Ch2k8Iso $ImportIso $InstallDirectory
@@ -285,12 +332,13 @@ try {
         if (-not $PSBoundParameters.ContainsKey('RefreshRate') -and $saved.refresh_rate -ge 24 -and $saved.refresh_rate -le 240) { $RefreshRate = [int]$saved.refresh_rate }
         if (-not $PSBoundParameters.ContainsKey('WindowMode') -and $saved.window_mode -in @('windowed', 'borderless', 'exclusive')) { $WindowMode = $saved.window_mode }
         if (-not $PSBoundParameters.ContainsKey('GameData') -and $saved.game_data) { $GameData = [string]$saved.game_data }
+        if (-not $PSBoundParameters.ContainsKey('Executable') -and $saved.executable -and (Test-Path -LiteralPath (Join-Path $repoRoot 'port/ch2k8_manifest.toml')) -and (Test-Path -LiteralPath $saved.executable -PathType Leaf)) { $Executable=[string]$saved.executable }
     }
 } catch { Write-Verbose "Ignoring invalid launcher settings: $_" }
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'College Hoops 2K8 - ZMO beta 1'
-$form.ClientSize = New-Object System.Drawing.Size(620, 660)
+$form.ClientSize = New-Object System.Drawing.Size(620, 755)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedDialog'
 $form.MaximizeBox = $false
@@ -369,7 +417,21 @@ $import = New-Object System.Windows.Forms.Button
 $import.Text = 'Import ISO...'
 $import.SetBounds(24, 410, 170, 34)
 $form.Controls.Add($import)
-$importHint = Add-Label 'Extracts into editable loose assets using the included native tools.' 208 414 382
+$importHint = Add-Label 'Uses native tools. No Python needed for ISO import.' 395 414 195
+$selectXex=New-Object System.Windows.Forms.Button
+$selectXex.Text='Select XEX...'
+$selectXex.SetBounds(208,410,170,34);$form.Controls.Add($selectXex)
+$selectXex.Add_Click({
+    $dialog=New-Object System.Windows.Forms.OpenFileDialog
+    $dialog.Filter='Xbox 360 executable (*.xex)|*.xex'
+    try {
+        if($dialog.ShowDialog($form) -eq 'OK'){
+            if((Get-FileHash -LiteralPath $dialog.FileName).Hash.ToLowerInvariant() -ne '71e8983d1cc009e485696aad19b5fa4b4661761870e2c8972717b932c1e4be36'){throw 'Select the original USA College Hoops 2K8 default.xex.'}
+            $dataBox.Text=Split-Path -Parent $dialog.FileName
+            $status.Text='XEX selected. Playing also needs the disc assets beside default.xex. Use Import ISO if you have the full ISO.'
+        }
+    }catch{$status.Text=$_.Exception.Message}finally{$dialog.Dispose()}
+})
 $importHint.Height = 42
 $importHint.ForeColor = [System.Drawing.Color]::Silver
 $import.Add_Click({
@@ -463,6 +525,29 @@ $reportButton.Add_Click({
     } catch { $status.Text = $_.Exception.Message }
     finally { $dialog.Dispose() }
 })
+$buildButton=New-Object System.Windows.Forms.Button
+$buildButton.Text='Build from XEX / ISO'
+$buildButton.SetBounds(24,648,265,36)
+$buildButton.Enabled=(Test-Path -LiteralPath (Join-Path $repoRoot 'port/ch2k8_manifest.toml')) -and (Test-Path -LiteralPath (Join-Path $repoRoot 'tools/build_ch2k8.ps1'))
+$form.Controls.Add($buildButton)
+$buildButton.Add_Click({
+    $dialog=New-Object System.Windows.Forms.OpenFileDialog
+    $dialog.Filter='College Hoops 2K8 executable or disc (*.xex;*.iso)|*.xex;*.iso'
+    try{
+        if($dialog.ShowDialog($form) -ne 'OK'){return}
+        $result=Invoke-Ch2k8SourceBuild $dialog.FileName -Interactive
+        $script:Executable=[string]$result.executable
+        if($result.game_data){$dataBox.Text=[string]$result.game_data}
+        $status.Text=if($result.data_ready){'Build completed. Check setup, then launch.'}else{'Recompilation built. Select a complete disc folder or import an ISO before playing; a bare XEX has no game assets.'}
+    }catch{[System.Windows.Forms.MessageBox]::Show($form,$_.Exception.Message,'Source build','OK','Error')|Out-Null}finally{$dialog.Dispose()}
+})
+$download=New-Object System.Windows.Forms.Button
+$download.Text='Download runnable beta'
+$download.SetBounds(312,648,274,36);$form.Controls.Add($download)
+$download.Add_Click({Start-Process 'https://github.com/kima1810/CH2K8-decomp/releases/tag/ZMO-beta1'})
+$distributionHint=Add-Label 'GitHub source ZIPs require compilation. The release asset includes ch2k8.exe and all runtime files.' 24 700 562
+$distributionHint.Height=42;$distributionHint.ForeColor=[Drawing.Color]::Silver
+if(-not (Test-Path -LiteralPath (Join-Path $repoRoot 'ch2k8.exe')) -and -not (Test-Path -LiteralPath (Join-Path $repoRoot 'port/out/build/win-amd64-vulkan/ch2k8.exe')) -and -not (Test-Path -LiteralPath (Join-Path $repoRoot 'port/out/build/win-amd64/ch2k8.exe'))){$status.Text='Source checkout: build from XEX / ISO, or download the runnable beta below. An ISO import alone does not compile the game.'}
 $form.AcceptButton = $play
 $play.Add_Click({
     try {
@@ -474,7 +559,7 @@ $play.Add_Click({
         $null = New-Item -ItemType Directory -Path (Split-Path -Parent $settingsPath) -Force
         @{ renderer = $selectedBackend; render_path = $selectedPath; resolution = [string]$size.SelectedItem;
            refresh_rate = [int]$rate.Value; window_mode = $selectedMode;
-           game_data = $dataBox.Text } | ConvertTo-Json | Set-Content -LiteralPath $settingsPath -Encoding utf8
+           game_data = $dataBox.Text; executable = $configuration.executable } | ConvertTo-Json | Set-Content -LiteralPath $settingsPath -Encoding utf8
         $form.Close()
     } catch {
         [System.Windows.Forms.MessageBox]::Show($form, $_.Exception.Message, 'Unable to launch', 'OK', 'Error') | Out-Null
