@@ -3,6 +3,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
+#include "../../port/src/native_path.h"
 #include "../../port/third_party/nlohmann/json.hpp"
 #include <algorithm>
 #include <array>
@@ -38,7 +39,11 @@ inline std::string utf8(const fs::path &p) {
   auto s = p.generic_u8string();
   return {s.begin(), s.end()};
 }
-inline fs::path path(const std::string &s) { return fs::path(std::u8string(s.begin(),s.end())); }
+inline fs::path path(const std::string &s) {
+  return fs::path(std::u8string(s.begin(), s.end()));
+}
+// Win32 extended paths keep derived headers usable in deeply nested folders.
+inline fs::path longpath(const fs::path &p) { return ch2k8::NativePath(p); }
 inline std::string lower(std::string s) {
   for (auto &c : s)
     if (c >= 'A' && c <= 'Z')
@@ -92,31 +97,32 @@ inline Bytes sub(std::span<const uint8_t> b, uint64_t off, uint64_t size) {
   return {b.begin() + off, b.begin() + off + size};
 }
 inline Bytes read(const fs::path &p, uint64_t max = 512ull << 20) {
-  auto size = fs::file_size(p);
+  auto size = fs::file_size(longpath(p));
   require(size <= max, "Resource exceeds bounded tool capacity: " + utf8(p));
   Bytes b(size);
-  std::ifstream f(p, std::ios::binary);
+  std::ifstream f(longpath(p), std::ios::binary);
   require(bool(f), "Cannot open " + utf8(p));
   f.read(reinterpret_cast<char *>(b.data()), b.size());
   require(uint64_t(f.gcount()) == size, "Short resource read: " + utf8(p));
   return b;
 }
 inline void write(const fs::path &p, std::span<const uint8_t> b) {
-  fs::create_directories(p.parent_path());
-  std::ofstream f(p, std::ios::binary | std::ios::trunc);
+  fs::create_directories(longpath(p.parent_path()));
+  std::ofstream f(longpath(p), std::ios::binary | std::ios::trunc);
   require(bool(f), "Cannot write " + utf8(p));
   f.write(reinterpret_cast<const char *>(b.data()), b.size());
   f.close();
   require(bool(f), "Write failed (check disk space): " + utf8(p));
 }
 inline void publish(const fs::path &p, std::span<const uint8_t> b) {
-  if (fs::is_regular_file(p) && fs::file_size(p) == b.size() &&
+  if (fs::is_regular_file(longpath(p)) &&
+      fs::file_size(longpath(p)) == b.size() &&
       read(p) == Bytes(b.begin(), b.end()))
     return;
-  auto tmp = p;
+  auto tmp = longpath(p);
   tmp += L".tmp";
   write(tmp, b);
-  require(MoveFileExW(tmp.c_str(), p.c_str(),
+  require(MoveFileExW(tmp.c_str(), longpath(p).c_str(),
                       MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH),
           "Cannot publish " + utf8(p));
 }
@@ -167,7 +173,7 @@ inline std::string sha(std::span<const uint8_t> b) {
   return h.finish();
 }
 inline std::string file_sha(const fs::path &p) {
-  std::ifstream f(p, std::ios::binary);
+  std::ifstream f(longpath(p), std::ios::binary);
   require(bool(f), "Cannot hash file");
   Hash h;
   Bytes b(8 << 20);
@@ -199,8 +205,8 @@ inline uint32_t crc(std::string s) {
 inline fs::path contained(const fs::path &root, const std::string &relative) {
   auto r = path(relative);
   require(!r.is_absolute() && !r.has_root_name(), "Absolute loose asset path");
-  auto base = fs::weakly_canonical(root);
-  auto full = fs::weakly_canonical(base / r);
+  auto base = longpath(fs::weakly_canonical(longpath(root)));
+  auto full = longpath(fs::weakly_canonical(longpath(base / r)));
   auto rel = full.lexically_relative(base);
   require(!rel.empty() && *rel.begin() != "..",
           "Loose resource path escapes installation");

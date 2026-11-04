@@ -62,3 +62,22 @@ def test_launcher_build_validation_rejects_wrong_xex_without_starting_build(tmp_
     xex=tmp_path/'wrong.xex';xex.write_bytes(b'wrong title')
     result=subprocess.run([SHELL,'-NoProfile','-ExecutionPolicy','Bypass','-File',str(ROOT/'tools/launch_ch2k8.ps1'),'-BuildSource',str(xex),'-ValidateOnly'],capture_output=True,text=True)
     assert result.returncode!=0 and 'Unsupported XEX' in result.stderr
+
+
+def test_native_import_handles_deep_derived_header_paths(tmp_path):
+    tool=ROOT/'out/native-tools/ch2k8_tools.exe'
+    if not tool.is_file():pytest.skip('Build native tools first')
+    from test_loose_assets import make_disc
+    source=tmp_path/'disc';make_disc(source)
+    parent=tmp_path/('nested-installation-'+'a'*22)/('nested-installation-'+'b'*22)/('nested-installation-'+'c'*22)
+    parent.mkdir(parents=True)
+    output=parent/'game'
+    result=subprocess.run([str(tool),'import',str(source),str(output),'--expected-xex-sha256',hashlib.sha256(b'XEX2 fixture').hexdigest()],capture_output=True,text=True)
+    assert result.returncode==0,result.stderr
+    assert (output/'assets.map').is_file()
+    # The temporary import is deeper than its final destination; native metadata
+    # writes must use Win32 extended paths without changing relative map entries.
+    assert '_runtime/headers/' in (output/'assets.map').read_text()
+    runtime=subprocess.run([str(tool),'validate-runtime',str(output)],capture_output=True,text=True)
+    assert runtime.returncode==0,runtime.stderr
+    assert not list(parent.glob('.ch2k8-import-*'))

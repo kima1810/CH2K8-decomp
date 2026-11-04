@@ -1,6 +1,6 @@
 <# Build a portable beta ZIP from existing compiled output. No game data is included. #>
 [CmdletBinding()]
-param([string]$BuildDirectory, [string]$OutputDirectory, [string]$CrtDirectory, [string]$RuntimeSourceRevision)
+param([string]$BuildDirectory, [string]$OutputDirectory, [string]$CrtDirectory, [string]$RuntimeSourceRevision, [string]$SdkRuntimeSourceRevision)
 $ErrorActionPreference = 'Stop'
 # A caller using PowerShell 7 may pass a module path without Windows modules.
 Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Utility')
@@ -55,7 +55,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Cannot identify source revision.' }
 $buildHashes = @{}
 foreach ($name in $runtime) { $buildHashes[$name] = (Get-FileHash -LiteralPath (Join-Path $stage $name) -Algorithm SHA256).Hash.ToLowerInvariant() }
 $dirty = [bool](& git -C $repo status --porcelain --untracked-files=normal)
-@{version='ZMO-beta1';source_revision=$revision;built_utc=[DateTime]::UtcNow.ToString('o');game_data_included=$false;runtime_source_revision=$RuntimeSourceRevision;asset_tools='native';platform='windows-x64';cpu_minimum='SSE4.1';build_files=$buildHashes;source_dirty=$dirty;controller_db_revision='07af1d50187e94c861c9f9f5d8a55b148f11306b'} |
+@{version='ZMO-beta1';source_revision=$revision;built_utc=[DateTime]::UtcNow.ToString('o');game_data_included=$false;runtime_source_revision=$RuntimeSourceRevision;sdk_runtime_source_revision=$SdkRuntimeSourceRevision;asset_tools='native';platform='windows-x64';cpu_minimum='SSE4.1';build_files=$buildHashes;source_dirty=$dirty;controller_db_revision='07af1d50187e94c861c9f9f5d8a55b148f11306b'} |
     ConvertTo-Json | Set-Content -LiteralPath (Join-Path $stage 'beta-version.json') -Encoding UTF8
 Get-ChildItem -LiteralPath $stage -File -Recurse | ForEach-Object {
     (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() + '  ' + $_.FullName.Substring($stage.Length + 1)

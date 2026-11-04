@@ -1,3 +1,4 @@
+#include "../port/src/loose_archive.h"
 #include "native_assets/disc.h"
 #include "native_assets/prepare.h"
 constexpr const char *SupportedXex =
@@ -48,10 +49,10 @@ J import_game(const fs::path &image, const fs::path &destination, Job &job,
                 !(GetFileAttributesW(staging.c_str()) &
                   FILE_ATTRIBUTE_REPARSE_POINT),
             "Unsafe import staging location; cleanup refused");
-    fs::remove_all(owned);
+    fs::remove_all(longpath(owned));
   };
   try {
-    auto game = staging / L"game";
+    auto game = longpath(staging / L"game");
     fs::create_directories(game / L"assets");
     write(game / L"default.xex",
           disc.member("default.xex", 0, disc.size("default.xex")));
@@ -94,7 +95,7 @@ J import_game(const fs::path &image, const fs::path &destination, Job &job,
     job.update(done, done, "Finalizing loose asset installation...");
     require(!fs::exists(output),
             "Destination appeared during import; it was left untouched");
-    fs::rename(game, output);
+    fs::rename(game, longpath(output));
     cleanup();
     return J{{"game_data", utf8(fs::canonical(output))},
              {"storage", "loose-resources"}};
@@ -141,7 +142,16 @@ int wmain(int argc, wchar_t **argv) {
           {"python_required", false},
           {"features", J::array({"iso", "xex-extraction", "direct-resources",
                                  "native-dds", "native-pcm"})}};
-    else if (pos[0] == "inspect") {
+    else if (pos[0] == "validate-runtime") {
+      require(pos.size() == 2, "Usage: validate-runtime GAME_FOLDER");
+      ch2k8::LooseArchive archive(path(pos[1]));
+      std::array<uint8_t, 16> bytes{};
+      for (const auto &part : archive.parts()) {
+        require(archive.Read(part.offset, bytes) == bytes.size(),
+                "Runtime map read failed");
+      }
+      result = {{"ready", true}, {"parts", archive.parts().size()}};
+    } else if (pos[0] == "inspect") {
       require(pos.size() == 2, "Usage: inspect ISO");
       Disc disc(path(pos[1]));
       Archive archive(disc);

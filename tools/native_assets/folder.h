@@ -87,13 +87,14 @@ struct Folder {
   J manifest, compat;
   std::map<uint32_t, J> layouts, entries;
   explicit Folder(fs::path r)
-      : root(fs::canonical(r)), manifest(json(root / L"assets.json")) {
+      : root(longpath(fs::canonical(longpath(r)))),
+        manifest(json(root / L"assets.json")) {
     require(manifest.value("version", 0) == 1 &&
                 manifest.value("platform", std::string()) == "xbox360",
             "Unsupported asset installation");
     if (manifest.contains("loader_metadata"))
       compat = manifest["loader_metadata"];
-    else if (fs::exists(root / L"_runtime/compatibility.json"))
+    else if (fs::exists(longpath(root / L"_runtime/compatibility.json")))
       compat = json(root / L"_runtime/compatibility.json");
     else {
       require(manifest.contains("parts") && manifest.contains("segments"),

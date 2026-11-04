@@ -63,7 +63,7 @@ inline void validate_tree(const fs::path &root, Job &job) {
   }
 }
 inline J prepare(const fs::path &source, Job &job) {
-  auto root = fs::canonical(source);
+  auto root = longpath(fs::canonical(longpath(source)));
   validate_tree(root, job);
   auto original = json(root / L"assets.json");
   materialize(root, original, job, true);
