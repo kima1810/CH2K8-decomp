@@ -118,3 +118,21 @@ Invoke-BuildCommand 'mock-compiler' $Interpreter @($Child) 'Retry with -Jobs 1 a
         assert 'final compiler explanation' in report['message'] and '-Jobs 1' in report['recovery']
     else:
         assert result.returncode==0,result.stderr
+
+
+def test_visual_studio_selection_uses_latest_complete_toolset(tmp_path):
+    old=tmp_path/'VS 2022';new=tmp_path/'VS 2026';incomplete=tmp_path/'VS future without C++'
+    for root in (old,new):
+        headers=root/'VC/Tools/MSVC/14.99/include/vector';headers.parent.mkdir(parents=True);headers.touch()
+        setup=root/'VC/Auxiliary/Build/vcvars64.bat';setup.parent.mkdir(parents=True);setup.touch()
+    instances=tmp_path/'instances.json'
+    instances.write_text(json.dumps([{'installationPath':str(old),'installationVersion':'17.9.0'},{'installationPath':str(incomplete),'installationVersion':'19.0.0'},{'installationPath':str(new),'installationVersion':'18.6.0'}]))
+    wrapper=tmp_path/'select.ps1'
+    wrapper.write_text('''param($Support,$Instances)
+$ErrorActionPreference='Stop'
+. $Support
+Select-BuildVisualStudio (Get-Content -LiteralPath $Instances -Raw|ConvertFrom-Json)
+''',encoding='utf-8')
+    result=subprocess.run([SHELL,'-NoProfile','-ExecutionPolicy','Bypass','-File',str(wrapper),'-Support',str(ROOT/'tools/build_support.ps1'),'-Instances',str(instances)],capture_output=True,text=True)
+    assert result.returncode==0,result.stderr
+    assert Path(result.stdout.strip())==new

@@ -38,6 +38,7 @@ try {
     $python=Find-BuildPython $PythonExecutable $repo
     $tools=Initialize-BuildToolchain
     $cmake=$tools.cmake;$clang=$tools.clang;$ninja=$tools.ninja
+    Test-BuildCompiler $clang
     if(-not $PSBoundParameters.ContainsKey('Jobs')){
         try{
             $memory=Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
@@ -45,7 +46,7 @@ try {
         }catch{Write-BuildMessage 'Memory detection unavailable; using the conservative default of two compiler jobs.'}
     }
     $pythonCMake=$python.Replace('\','/')
-    $plan=[pscustomobject]@{source=$Source;source_kind=$kind;python=$python;cmake=$cmake;clang=$clang;ninja=$ninja;git=$tools.git;visual_studio=$tools.visual_studio;windows_sdk=$tools.windows_sdk;jobs=$Jobs;sdk=$SdkDirectory;build_directory=$BuildDirectory;install_directory=$InstallDirectory;code_only=[bool]$CodeOnly;xex_alone_needs_assets_for_play=$true;log=$LogFile;status=$global:Ch2k8BuildContext.status}
+    $plan=[pscustomobject]@{source=$Source;source_kind=$kind;python=$python;cmake=$cmake;clang=$clang;ninja=$ninja;git=$tools.git;visual_studio=$tools.visual_studio;vc_tools=$tools.vc_tools;windows_sdk=$tools.windows_sdk;jobs=$Jobs;sdk=$SdkDirectory;build_directory=$BuildDirectory;install_directory=$InstallDirectory;code_only=[bool]$CodeOnly;xex_alone_needs_assets_for_play=$true;log=$LogFile;status=$global:Ch2k8BuildContext.status}
     $plan|ConvertTo-Json|Set-Content -LiteralPath (Join-Path (Split-Path -Parent $LogFile) 'environment.json') -Encoding UTF8
     if($ValidateOnly){Write-BuildStatus 'prerequisites' 'validated' 'Prerequisites passed. ISO identity is checked by native extraction before SDK compilation.';$plan|ConvertTo-Json;return}
     Write-BuildStatus 'workspace-lock' -Message 'Reserving this source checkout for one build'

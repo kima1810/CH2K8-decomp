@@ -10,7 +10,7 @@ if(-not $global:Ch2k8BuildContext){
     $global:Ch2k8BuildContext=@{stage='sdk-prerequisites';source='pinned-sdk';log=(Join-Path $folder 'build.log');status=(Join-Path $folder 'status.json')}
 }
 $PythonExecutable=Find-BuildPython $PythonExecutable $repoRoot
-if(-not $ToolchainReady){$null=Initialize-BuildToolchain}
+if(-not $ToolchainReady){$toolchain=Initialize-BuildToolchain;Test-BuildCompiler $toolchain.clang}
 $source=Join-Path $repoRoot 'work/third_party/rexglue-vulkan'
 $build=Join-Path $repoRoot 'port/out/build/sdk-vulkan'
 $install=Join-Path $repoRoot 'port/sdk-vulkan'

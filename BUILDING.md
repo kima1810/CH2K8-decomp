@@ -10,7 +10,7 @@ Use Windows 10/11 x64 on Intel/AMD. Install:
 - LLVM **Clang 20 or later**, CMake **3.25 or later**, Ninja and Git. CMake/Ninja/LLVM bundled with Visual Studio are detected when available; the LLVM version must still meet the minimum.
 - Python **3.11 or later**. A real interpreter is detected via installed locations, registry and `py`; Microsoft Store aliases are skipped.
 
-Keep source in a short local writable path, for example `C:/dev/CH2K8`. SDK downloads and compilation need several GB; decoded ISO assets can take substantially more than the disc image. Cloud-synced folders, network drives and Wine are not validated build environments. Do not build two processes in the same checkout. No administrator/developer terminal is required after the prerequisites are installed: the script imports the x64 Microsoft compiler environment automatically.
+Keep source in a short local writable path, for example `C:/dev/CH2K8`. SDK downloads and compilation need several GB; decoded ISO assets can take substantially more than the disc image. Cloud-synced folders, network drives and Wine are not validated build environments. Do not build two processes in the same checkout. No administrator/developer terminal is required after the prerequisites are installed: the script imports the newest complete x64 Microsoft compiler environment automatically. A small Windows C++ program is compiled, linked and run during preflight, catching mixed STL/library and missing redistributable problems before the SDK build.
 
 ## One build command
 
@@ -45,7 +45,7 @@ Every invocation creates `build.log` and `status.json` under `port/userdata/buil
 | Failed stage | Action |
 | --- | --- |
 | input / iso-executable | Confirm disc root, complete Xbox 360 ISO and reported executable hash. ZIP/7z, GOD/STFS and PS3 containers need their own extraction/conversion first. |
-| prerequisites | Install the missing component/version shown in the report; rerun from ordinary PowerShell. |
+| prerequisites / compiler-probe / compiler-runtime | Install the missing component/version shown in the report; rerun from ordinary PowerShell. |
 | sdk-clone / sdk-submodules | Check GitHub/proxy access and disk space, then rerun to resume. Git long-path handling is enabled for dependency checkout. |
 | sdk-patches | Use the pinned SDK with current tracked scripts. Report unrecognized patch targets; do not bypass them. |
 | sdk-configure / game-configure | Check the CMake error. Use a new game build directory for a stale/moved cache. Existing files are preserved. |

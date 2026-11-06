@@ -56,6 +56,14 @@ function Find-BuildCommand {
 
 # Import the compiler/Windows SDK environment for double-clicked launchers and
 # ordinary PowerShell terminals, not just Visual Studio developer prompts.
+function Select-BuildVisualStudio($Instances) {
+    foreach($instance in @($Instances|Sort-Object {[version]$_.installationVersion} -Descending)){
+        $candidate=[string]$instance.installationPath
+        $headers=@(Get-Item -Path (Join-Path $candidate 'VC/Tools/MSVC/*/include/vector') -ErrorAction SilentlyContinue)
+        if($headers.Count -and (Test-Path -LiteralPath (Join-Path $candidate 'VC/Auxiliary/Build/vcvars64.bat'))){return $candidate}
+    }
+    return $null
+}
 function Initialize-BuildToolchain {
     if (-not [Environment]::Is64BitProcess -or $env:PROCESSOR_ARCHITECTURE -ne 'AMD64') {
         throw 'Source compilation requires Windows x64 on an Intel/AMD PC. Use the Windows x64 build host; Wine/macOS/ARM builds are not validated.'
@@ -63,7 +71,10 @@ function Initialize-BuildToolchain {
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
     $installation = $null
     if (Test-Path -LiteralPath $vswhere) {
-        $installation = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+        # New VS releases can rename component IDs. Query all installations and
+        # inspect the actual x64 toolset instead of excluding a valid newer SDK.
+        $instances=& $vswhere -all -products '*' -format json|ConvertFrom-Json
+        $installation=Select-BuildVisualStudio $instances
     }
     if ($installation) {
         $vcvars = Join-Path $installation 'VC/Auxiliary/Build/vcvars64.bat'
@@ -104,7 +115,25 @@ function Initialize-BuildToolchain {
     if ($cmakeVersion -notmatch '(\d+\.\d+\.\d+)' -or [version]$matches[1] -lt [version]'3.25.0') { throw "CMake 3.25+ is required; detected: $cmakeVersion" }
     if ($clangVersion -notmatch 'version (\d+)' -or [int]$matches[1] -lt 20) { throw "Clang 20+ is required; detected: $clangVersion. Install current LLVM and reopen PowerShell." }
     foreach ($tool in @($cmake,$clang,$ninja,$git)) { $env:PATH=(Split-Path -Parent $tool)+';'+$env:PATH }
-    [pscustomobject]@{cmake=$cmake;clang=$clang;ninja=$ninja;git=$git;visual_studio=$installation;windows_sdk=$env:WindowsSdkDir;cmake_version=$cmakeVersion;clang_version=$clangVersion}
+    [pscustomobject]@{cmake=$cmake;clang=$clang;ninja=$ninja;git=$git;visual_studio=$installation;vc_tools=$env:VCToolsInstallDir;windows_sdk=$env:WindowsSdkDir;cmake_version=$cmakeVersion;clang_version=$clangVersion}
+}
+
+function Test-BuildCompiler([string]$Compiler) {
+    $folder=Join-Path (Split-Path -Parent $global:Ch2k8BuildContext.log) 'compiler-probe'
+    $null=New-Item -ItemType Directory -Path $folder -Force
+    $source=Join-Path $folder 'toolchain.cpp';$program=Join-Path $folder 'toolchain.exe'
+    @'
+#include <windows.h>
+#include <string>
+#include <iostream>
+int main(int argc,char** argv) {
+ std::string value=argc>1?argv[1]:"probe/path";
+ std::cout << value.find_first_of("/\\") << ":" << value.find_last_of("/\\") << ":" << GetCurrentProcessId() << "\n";
+ return 0;
+}
+'@ | Set-Content -LiteralPath $source -Encoding ASCII
+    Invoke-BuildCommand 'compiler-probe' $Compiler @('-std=c++23','-O2','-DNDEBUG','-fms-runtime-lib=dll',$source,'-o',$program) 'The compiler cannot compile/link a Windows C++ program. Repair/update the Microsoft C++ tools and Windows SDK. Undefined __std_* symbols usually indicate mixed Microsoft STL headers/libraries; use the newest complete installed toolset.'
+    Invoke-BuildCommand 'compiler-runtime' $program @() 'The compiled probe could not run. Repair/install the x64 Microsoft C++ redistributable matching your build tools, then retry.'
 }
 
 function Write-BuildStatus {
