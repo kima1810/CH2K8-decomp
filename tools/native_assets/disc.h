@@ -10,7 +10,8 @@ struct Disc {
   std::map<std::string, Member> members;
   std::set<uint64_t> dirs;
   explicit Disc(fs::path p)
-      : source(fs::canonical(p)), iso(fs::is_regular_file(p)) {
+      : source(longpath(fs::canonical(longpath(p)))),
+        iso(fs::is_regular_file(longpath(p))) {
     if (!iso)
       return;
     image_size = fs::file_size(source);
@@ -25,7 +26,31 @@ struct Disc {
           break;
         }
       }
-    require(found, "No XDVDFS volume descriptor found");
+    // Some valid trimmed/rebuilt disc dumps use another partition offset.
+    // Scan sector-aligned descriptors in bounded blocks, preserving the fast
+    // path above for normal XGD2/XGD3 and game-partition-only images.
+    if (!found) {
+      constexpr uint64_t chunk = 2ull << 20;
+      auto limit = std::min<uint64_t>(image_size, 1ull << 30);
+      for (uint64_t start = 65536; start + 28 <= limit && !found;
+           start += chunk) {
+        auto data = physical(start, std::min<uint64_t>(chunk, limit - start));
+        for (size_t o = 0; o + 28 <= data.size(); o += 2048) {
+          if (std::string_view(reinterpret_cast<const char *>(data.data() + o),
+                               20) != "MICROSOFT*XBOX*MEDIA")
+            continue;
+          base = start + o - 65536;
+          walk(le(data, o + 20), le(data, o + 24), "", 0);
+          found = true;
+          break;
+        }
+      }
+    }
+    require(
+        found,
+        "No XDVDFS volume descriptor found at standard offsets or within the "
+        "first 1 GiB. Supply a complete Xbox 360 ISO or extracted disc folder; "
+        "ZIP/7z, GOD/STFS and PS3 containers are not ISO disc images.");
     require(exists("default.xex") && exists("0A"),
             "Xbox game ISO lacks default.xex/0A");
   }

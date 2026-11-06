@@ -4,6 +4,7 @@ param(
     [Parameter(Mandatory=$true)][string]$Package,
     [Parameter(Mandatory=$true)][ValidatePattern('^[a-f0-9]{40}$')][string]$TargetCommit,
     [Parameter(Mandatory=$true)][string]$NotesFile,
+    [ValidatePattern('^[A-Za-z0-9._-]+$')][string]$Tag='ZMO-beta1',
     [switch]$Publish
 )
 $ErrorActionPreference='Stop'
@@ -19,9 +20,9 @@ if(-not $credentials.password){throw 'GitHub Git credentials are unavailable.'}
 $headers=@{Authorization='Bearer '+$credentials.password;Accept='application/vnd.github+json';'User-Agent'='CH2K8-beta-maintenance';'X-GitHub-Api-Version'='2022-11-28'}
 $base='https://api.github.com/repos/kima1810/CH2K8-decomp'
 $release=$null
-try{$release=Invoke-RestMethod -Uri "$base/releases/tags/ZMO-beta1" -Headers $headers}catch{if([int]$_.Exception.Response.StatusCode -ne 404){throw}}
+try{$release=Invoke-RestMethod -Uri "$base/releases/tags/$Tag" -Headers $headers}catch{if([int]$_.Exception.Response.StatusCode -ne 404){throw}}
 if(-not $release){
-    $body=@{tag_name='ZMO-beta1';target_commitish=$TargetCommit;name='ZMO beta 1 - Windows x64';body=$notes;draft=$true;prerelease=$true}|ConvertTo-Json
+    $body=@{tag_name=$Tag;target_commitish=$TargetCommit;name="$Tag - Windows x64";body=$notes;draft=$true;prerelease=$true}|ConvertTo-Json
     $release=Invoke-RestMethod -Uri "$base/releases" -Headers $headers -Method Post -Body $body -ContentType 'application/json'
 }
 $name=[IO.Path]::GetFileName($Package)
@@ -33,7 +34,7 @@ $checksum=$Package+'.sha256'
 $sumUpload='https://uploads.github.com/repos/kima1810/CH2K8-decomp/releases/'+$release.id+'/assets?name='+[Uri]::EscapeDataString($name+'.sha256')
 $null=Invoke-RestMethod -Uri $sumUpload -Headers $headers -Method Post -InFile $checksum -ContentType 'text/plain'
 if($Publish){
-    $body=@{draft=$false;prerelease=$true;body=$notes;name='ZMO beta 1 - Windows x64'}|ConvertTo-Json
+    $body=@{draft=$false;prerelease=$true;body=$notes;name="$Tag - Windows x64"}|ConvertTo-Json
     $release=Invoke-RestMethod -Uri "$base/releases/$($release.id)" -Headers $headers -Method Patch -Body $body -ContentType 'application/json'
 }
 @{release=$release.html_url;asset=$asset.browser_download_url;draft=$release.draft;sha256=(Get-FileHash -LiteralPath $Package).Hash.ToLowerInvariant()}|ConvertTo-Json

@@ -98,7 +98,7 @@ def test_native_import_and_maps_match_development_reference(tmp_path,kind):
         assert (native/'assets.map').read_bytes()==old
 
 
-@pytest.mark.parametrize('base',[0,0xFD90000,0x2080000,0x18300000])
+@pytest.mark.parametrize('base',[0,0xFD90000,0x2080000,0x18300000,0x500000])
 def test_native_iso_layouts_transaction_and_identity(tmp_path,base):
     image=make_iso(tmp_path,base);before=hashlib.sha256(image.read_bytes()).digest()
     output=tmp_path/'installation'

@@ -1,6 +1,6 @@
 # College Hoops 2K8 — ZMO beta 1
 
-Download the **runnable Windows ZIP under Assets** from [the beta release](https://github.com/kima1810/CH2K8-decomp/releases/tag/ZMO-beta1). GitHub's automatic **Source code (zip)** is a developer checkout; it contains no `ch2k8.exe` and cannot launch until compiled.
+Download the **runnable Windows ZIP under Assets** from [the beta release](https://github.com/kima1810/CH2K8-decomp/releases/tag/ZMO-beta1-20261106). GitHub's automatic **Source code (zip)** is a developer checkout; it contains no `ch2k8.exe` and cannot launch until compiled.
 
 ## Install and play (Windows x64)
 
@@ -61,3 +61,7 @@ This builds the native helper, validates the supported USA XEX, stages a private
 Source builds require Python 3.11+, Git, CMake 3.25+, Ninja, Clang 20+ and Microsoft C++ Build Tools with the Windows SDK. The resolver probes real interpreters, the `py -3` launcher, Python's registry installation entries and standard installation folders, skipping Windows Store execution aliases. If Python is installed somewhere else, pass `-PythonExecutable "C:/path/to/python.exe"`. `-ValidateOnly` reports the selected prerequisites without building; `-SdkDirectory` reuses a patched installed SDK; `-CodeOnly` skips ISO asset import for code-generation testing. Keep a minimum of several GB free on the build drive. First SDK/game builds can take 30 minutes or longer. UI build logs are under `port/userdata/builds`.
 
 The source build writes `port/userdata/build-result.json` and remembers the executable and game-data path for the next launcher session. The runnable release asset continues to use native tools and does not require Python, compilers, Git or an SDK.
+
+## Source-build diagnostics update
+
+See [BUILDING.md](https://github.com/kima1810/CH2K8-decomp/blob/ZMO-beta1/BUILDING.md) for the current ISO-to-executable workflow. The source builder imports the Visual Studio x64 environment automatically, detects bundled tools, records prerequisite failures before compilation, streams both native output channels, and reports failed stage/exit code/recovery advice. Use `-InstallDirectory` to place ISO assets on a different drive and `-Jobs 1` when memory is limited. A different XEX hash is a revision-compatibility report, not evidence of an illegitimate copy.

@@ -81,3 +81,40 @@ def test_native_import_handles_deep_derived_header_paths(tmp_path):
     runtime=subprocess.run([str(tool),'validate-runtime',str(output)],capture_output=True,text=True)
     assert runtime.returncode==0,runtime.stderr
     assert not list(parent.glob('.ch2k8-import-*'))
+
+
+def test_missing_input_creates_actionable_failure_report(tmp_path):
+    log=tmp_path/'logs/build.log'
+    result=subprocess.run([SHELL,'-NoProfile','-ExecutionPolicy','Bypass','-File',str(ROOT/'tools/build_ch2k8.ps1'),'-Source',str(tmp_path/'missing.iso'),'-LogFile',str(log)],capture_output=True,text=True)
+    assert result.returncode!=0
+    report=json.loads((log.parent/'status.json').read_text(encoding='utf-8-sig'))
+    assert report['state']=='failed' and report['stage']=='input'
+    assert 'Input not found' in report['message']
+    assert report['recovery'] and str(log) in result.stderr
+    assert 'Input not found' in log.read_text()
+
+
+@pytest.mark.parametrize('exit_code',[0,23])
+def test_native_build_runner_drains_both_streams_and_reports_failure(tmp_path,exit_code):
+    child=tmp_path/'compiler with spaces é.py'
+    child.write_text('import sys\nprint("unicode path: é 日本語")\nfor i in range(2500):\n print("output-"+str(i))\n print("diagnostic-"+str(i),file=sys.stderr)\nprint("final compiler explanation",file=sys.stderr)\nsys.exit('+str(exit_code)+')\n',encoding='utf-8')
+    wrapper=tmp_path/'worker.ps1'
+    wrapper.write_text('''param($Support,$Interpreter,$Child,$Folder)
+$ErrorActionPreference='Stop'
+Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Utility')
+. $Support
+$global:Ch2k8BuildContext=@{stage='start';source=$Child;log=(Join-Path $Folder 'build.log');status=(Join-Path $Folder 'status.json')}
+Invoke-BuildCommand 'mock-compiler' $Interpreter @($Child) 'Retry with -Jobs 1 after checking memory.'
+''',encoding='utf-8')
+    result=subprocess.run([SHELL,'-NoProfile','-ExecutionPolicy','Bypass','-File',str(wrapper),'-Support',str(ROOT/'tools/build_support.ps1'),'-Interpreter',sys.executable,'-Child',str(child),'-Folder',str(tmp_path)],capture_output=True,text=True,timeout=45)
+    log=(tmp_path/'build.log').read_text(encoding='utf-8')
+    assert 'output-2499' in log and 'diagnostic-2499' in log
+    assert 'unicode path: é 日本語' in log
+    assert 'final compiler explanation' in log
+    if exit_code:
+        assert result.returncode!=0
+        report=json.loads((tmp_path/'status.json').read_text(encoding='utf-8-sig'))
+        assert report['stage']=='mock-compiler' and report['exit_code']==exit_code
+        assert 'final compiler explanation' in report['message'] and '-Jobs 1' in report['recovery']
+    else:
+        assert result.returncode==0,result.stderr

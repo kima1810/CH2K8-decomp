@@ -7,8 +7,12 @@ J inspect(Disc &disc, Archive &archive, const std::string &expected, Job &job) {
   job.check();
   auto xex = disc.member("default.xex", 0, disc.size("default.xex"));
   auto hash = sha(xex);
-  require(hash == expected, "Unsupported default.xex: use the original USA "
-                            "Xbox 360 College Hoops 2K8 ISO");
+  require(hash == expected,
+          "Unsupported default.xex revision. Observed SHA256: " + hash +
+              "; compiled revision: " + expected +
+              ". Legitimacy is not determined by this hash. A different "
+              "revision needs compatible generated code; include this hash in "
+              "a compatibility report. Input was left unchanged.");
   return J{{"image_bytes", disc.iso ? fs::file_size(disc.source) : 0},
            {"xex_sha256", hash},
            {"archive_parts", archive.parts.size()},
@@ -19,7 +23,7 @@ J inspect(Disc &disc, Archive &archive, const std::string &expected, Job &job) {
 }
 J import_game(const fs::path &image, const fs::path &destination, Job &job,
               const std::string &expected) {
-  auto output = fs::absolute(destination).lexically_normal();
+  auto output = longpath(destination);
   require(!fs::exists(output), "Installation folder already exists; existing "
                                "folders are never overwritten");
   require(fs::is_directory(output.parent_path()),
@@ -43,8 +47,9 @@ J import_game(const fs::path &image, const fs::path &destination, Job &job,
   }
   require(created, "Cannot create a private ISO staging folder");
   auto cleanup = [&]() {
-    auto owned = fs::weakly_canonical(staging);
-    require(owned.parent_path() == fs::canonical(output.parent_path()) &&
+    auto owned = longpath(fs::weakly_canonical(longpath(staging)));
+    require(owned.parent_path() ==
+                    longpath(fs::canonical(longpath(output.parent_path()))) &&
                 utf8(owned.filename()).starts_with(".ch2k8-import-") &&
                 !(GetFileAttributesW(staging.c_str()) &
                   FILE_ATTRIBUTE_REPARSE_POINT),

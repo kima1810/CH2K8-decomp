@@ -63,13 +63,32 @@ function Invoke-Ch2k8SourceBuild {
             $label.SetBounds(18,18,524,110);$dialog.Controls.Add($label)
             $bar=New-Object System.Windows.Forms.ProgressBar;$bar.Style='Marquee';$bar.SetBounds(18,140,524,20);$dialog.Controls.Add($bar)
             $timer=New-Object System.Windows.Forms.Timer;$timer.Interval=500
-            $timer.Add_Tick({if($worker.HasExited){$timer.Stop();$dialog.Close()}})
+            $timer.Add_Tick({
+                $progressPath=Join-Path $job 'status.json'
+                if(Test-Path -LiteralPath $progressPath){
+                    try{
+                        $progress=Get-Content -LiteralPath $progressPath -Raw|ConvertFrom-Json
+                        $label.Text="Stage: $($progress.stage) ($($progress.state))`r`n$($progress.message)`r`nLog: $(Join-Path $job 'build.log')"
+                        if($label.Text.Length -gt 650){$label.Text=$label.Text.Substring(0,650)}
+                    }catch{}
+                }
+                if($worker.HasExited){$timer.Stop();$dialog.Close()}
+            })
             try{$timer.Start();$null=$dialog.ShowDialog($form)}finally{$timer.Stop();$timer.Dispose();$dialog.Dispose()}
         }
         $worker.WaitForExit()
         [IO.File]::WriteAllText((Join-Path $job 'stdout.log'),$stdout.GetAwaiter().GetResult())
         $errors=$stderr.GetAwaiter().GetResult();[IO.File]::WriteAllText((Join-Path $job 'stderr.log'),$errors)
-        if($worker.ExitCode -ne 0){throw "Source build failed. $errors Build log: $(Join-Path $job 'build.log')"}
+        if($worker.ExitCode -ne 0){
+            $report=Join-Path $job 'status.json'
+            if(Test-Path -LiteralPath $report){
+                $failure=Get-Content -LiteralPath $report -Raw|ConvertFrom-Json
+                $detail=[string]$failure.message
+                if($detail.Length -gt 1400){$detail=$detail.Substring($detail.Length-1400)}
+                throw "Build stopped at $($failure.stage).`r`n$detail`r`n$($failure.recovery)`r`nFull log: $(Join-Path $job 'build.log')"
+            }
+            throw "Source build failed. $errors Build log: $(Join-Path $job 'build.log')"
+        }
         return Get-Content -LiteralPath (Join-Path $repoRoot 'port/userdata/build-result.json') -Raw | ConvertFrom-Json
     } finally {$worker.Dispose()}
 }
@@ -186,7 +205,7 @@ function Get-LaunchConfiguration {
         $Program = if (Test-Path -LiteralPath $portableBuild -PathType Leaf) { $portableBuild } else { Join-Path $repoRoot "port/out/build/$preset/ch2k8.exe" }
     }
     if (-not $AllowMissing -and -not (Test-Path -LiteralPath $Program -PathType Leaf)) {
-        throw "Game build is missing: $Program. Extract the complete beta ZIP first, or see port/README.md to build from source."
+        throw "Game build is missing: $Program. This folder has no compiled game. Import ISO extracts assets; it does not compile the source. Use Build from XEX / ISO in the current full source checkout, or download CH2K8-ZMO-beta1-Windows-x64-*.zip under Assets at https://github.com/kima1810/CH2K8-decomp/releases/tag/ZMO-beta1-20261106 (not Source code.zip)."
     }
     if (-not $AllowMissing -and -not (Test-Path -LiteralPath (Join-Path $Data 'default.xex') -PathType Leaf)) {
         throw 'Choose the extracted Xbox 360 game folder containing default.xex.'
@@ -544,7 +563,7 @@ $buildButton.Add_Click({
 $download=New-Object System.Windows.Forms.Button
 $download.Text='Download runnable beta'
 $download.SetBounds(312,648,274,36);$form.Controls.Add($download)
-$download.Add_Click({Start-Process 'https://github.com/kima1810/CH2K8-decomp/releases/tag/ZMO-beta1'})
+$download.Add_Click({Start-Process 'https://github.com/kima1810/CH2K8-decomp/releases/tag/ZMO-beta1-20261106'})
 $distributionHint=Add-Label 'GitHub source ZIPs require compilation. The release asset includes ch2k8.exe and all runtime files.' 24 700 562
 $distributionHint.Height=42;$distributionHint.ForeColor=[Drawing.Color]::Silver
 if(-not (Test-Path -LiteralPath (Join-Path $repoRoot 'ch2k8.exe')) -and -not (Test-Path -LiteralPath (Join-Path $repoRoot 'port/out/build/win-amd64-vulkan/ch2k8.exe')) -and -not (Test-Path -LiteralPath (Join-Path $repoRoot 'port/out/build/win-amd64/ch2k8.exe'))){$status.Text='Source checkout: build from XEX / ISO, or download the runnable beta below. An ISO import alone does not compile the game.'}
