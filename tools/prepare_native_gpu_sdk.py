@@ -242,9 +242,9 @@ def prepare_native_gpu(source):
         current = path.read_text(encoding='utf-8')
         previous = patch_backend_constants(original, 'd3d12') if '/d3d12/' in relative else expected
         preceding = patch_backend_v3(original, 'd3d12') if '/d3d12/' in relative else expected
-        from prepare_native_sync_sdk import patch_sync, patch_sync_v1
+        from prepare_native_sync_sdk import patch_sync, patch_sync_v1, patch_sync_attribution
         with_sync = patch_sync(expected, 'common' if '/d3d12/' not in relative else 'd3d12') if '/vulkan/' not in relative else expected
-        if current == with_sync or ('/vulkan/' not in relative and current == patch_sync_v1(expected, 'common' if '/d3d12/' not in relative else 'd3d12')): expected = current
+        if ('/vulkan/' not in relative and current == patch_sync_attribution(expected,'common' if '/d3d12/' not in relative else 'd3d12')) or current == with_sync or ('/vulkan/' not in relative and current == patch_sync_v1(expected, 'common' if '/d3d12/' not in relative else 'd3d12')): expected = current
         published = patch_sync(patch_backend_v5(original,'d3d12'),'d3d12') if '/d3d12/' in relative else expected
         if current == published: expected = with_sync
         legacy=patch_sync(patch_backend_full_write(original,'d3d12'),'d3d12') if '/d3d12/' in relative else expected

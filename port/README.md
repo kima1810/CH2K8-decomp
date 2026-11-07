@@ -25,6 +25,14 @@ restores the previous RAM kernels; `compare` interleaves the two paths for opt-i
 hot-function profiling. The [kernel finding](../docs/findings/2026-11-03-native-geometry-kernels.md)
 records complete-job and live measurements, bitwise checks and remaining limits.
 
+The GPU-counter retry loop now uses bounded native progress waits after a short
+spin. Both original counter words are rechecked before sleeping; completion,
+cancellation and timeout decisions remain in the guest code. This reduces CPU
+contention without reducing visual quality. `--no-ch2k8_native_gpu_wait` restores
+polling; `--ch2k8_gpu_wait_stats` enables diagnostic timing. An older GPU DLL
+without the versioned progress exports automatically retains polling. See the
+[GPU wait finding](../docs/findings/2026-11-03-native-gpu-progress-wait.md).
+
 Release builds explicitly optimize both the generated game and host glue, even
 if the toolchain leaves `CMAKE_CXX_FLAGS_RELEASE` empty. They retain strict
 floating-point behavior, signed-integer wrapping and the existing CPU baseline. Native presentation also

@@ -47,7 +47,8 @@ add_custom_command(
         "${CMAKE_CURRENT_SOURCE_DIR}/../tools/prove_vector_store_ranges.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/../tools/geometry_batch_codegen.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/../tools/geometry_ram_codegen.py"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../tools/geometry_input_codegen.py")
+        "${CMAKE_CURRENT_SOURCE_DIR}/../tools/geometry_input_codegen.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../tools/gpu_wait_codegen.py")
 set(CH2K8_GAME_SOURCE "" CACHE FILEPATH "Xbox ISO or extracted disc directory for folder import")
 set(CH2K8_ASSET_DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/out/folder-game" CACHE PATH "New folder installation directory")
 if(CH2K8_GAME_SOURCE)
@@ -74,6 +75,7 @@ set(CH2K8_SOURCES
     src/frame_timing.cpp
     src/output_capture.cpp
     src/hot_functions.cpp
+    src/native_gpu_wait.cpp
     src/loose_device.cpp
 )
 

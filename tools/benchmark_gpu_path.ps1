@@ -16,12 +16,15 @@ param(
     [switch]$GpuStats,
     [switch]$PresentStats,
     [switch]$Visible,
+    [ValidateRange(0, 0x7FFFFFFFFFFFFFFF)][long]$CpuAffinityMask = 0,
     [ValidateSet('default','baseline','optimized')][string]$PresentPacing = 'default',
     [switch]$Keyboard,
     [ValidateSet('default','synchronous')][string]$ShaderCompilation = 'default',
     [switch]$ColdShaderCache,
     [switch]$PacketCompare,
     [switch]$HotFunctions,
+    [ValidateSet('default','baseline','optimized')][string]$NativeGpuWait = 'default',
+    [switch]$GpuWaitStats,
     [ValidateSet('default','baseline','optimized','compare')][string]$GeometryBatch = 'default',
     [ValidateSet('default','baseline','optimized','compare')][string]$RamStore = 'default',
     [ValidateSet('default','baseline','optimized')][string]$PixelState = 'default',
@@ -73,6 +76,8 @@ if ($ShaderCompilation -eq 'synchronous') { $arguments += '--no-async_shader_com
 if ($ColdShaderCache) { $arguments += '--no-store_shaders' }
 if ($PacketCompare) { $arguments += '--ch2k8_packet_compare' }
 if ($HotFunctions) { $arguments += "--ch2k8_hot_log=$(Join-Path $runRoot 'hot-functions.csv')" }
+if ($NativeGpuWait -ne 'default') { $arguments += if ($NativeGpuWait -eq 'baseline') {'--no-ch2k8_native_gpu_wait'} else {'--ch2k8_native_gpu_wait'} }
+if ($GpuWaitStats) { $arguments += '--ch2k8_gpu_wait_stats' }
 if ($GeometryBatch -ne 'default') { $arguments += "--ch2k8_geometry_batch=$GeometryBatch" }
 if ($RamStore -ne 'default') { $arguments += "--ch2k8_ram_store=$RamStore" }
 if ($DepthState -ne 'default') {
@@ -105,6 +110,7 @@ $configuration = [ordered]@{
     capture_seconds = $DurationSeconds; run_root = $runRoot
     matched_scene = $false
     visible_window = [bool]$Visible
+    cpu_affinity_mask = ('0x{0:x}' -f $CpuAffinityMask)
 }
 if ($ValidateOnly) { $configuration | ConvertTo-Json -Depth 4; return }
 if (Get-Process ch2k8 -ErrorAction SilentlyContinue) { throw 'CH2K8 is already running.' }
@@ -118,10 +124,12 @@ foreach ($binary in (Get-ChildItem -LiteralPath (Split-Path $Executable) -Filter
 $game = $null
 $telemetry = $null
 $writer = $null
+$observedAffinity = @{}
 $stoppedAtLimit = $false
 try {
     $windowStyle = if ($Visible) { 'Normal' } else { 'Hidden' }
     $game = Start-Process -FilePath $Executable -WorkingDirectory (Split-Path $Executable) -ArgumentList ($arguments | ForEach-Object { '"' + $_ + '"' }) -WindowStyle $windowStyle -PassThru
+    if ($CpuAffinityMask) { $game.ProcessorAffinity = [IntPtr]$CpuAffinityMask }
     $configuration.process_id = $game.Id
     $configuration | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $runRoot 'run.json') -Encoding utf8
     Write-Host "GPU experiment: $Profile; PID $($game.Id); local output: $runRoot"
@@ -131,13 +139,20 @@ try {
     }
     $writer = [System.IO.StreamWriter]::new((Join-Path $runRoot 'process.csv'), $false)
     $writer.AutoFlush = $true
-    $writer.WriteLine('elapsed_s,cpu_time_s,working_set_bytes,threads')
+    $writer.WriteLine('elapsed_s,cpu_time_s,working_set_bytes,threads,cpu_affinity_mask')
     $timer = [System.Diagnostics.Stopwatch]::StartNew()
     while (-not $game.HasExited -and $timer.Elapsed.TotalSeconds -lt $DurationSeconds) {
         $game.Refresh()
         if ($game.HasExited) { break }
-        $writer.WriteLine(('{0:F3},{1:F3},{2},{3}' -f $timer.Elapsed.TotalSeconds,
-            $game.TotalProcessorTime.TotalSeconds, $game.WorkingSet64, $game.Threads.Count))
+        # The SDK initializes its host affinity after process creation. Reapply
+        # a diagnostic restriction if that initialization widened the mask.
+        if ($CpuAffinityMask -and $game.ProcessorAffinity.ToInt64() -ne $CpuAffinityMask) {
+            $game.ProcessorAffinity = [IntPtr]$CpuAffinityMask
+        }
+        $effectiveAffinity = '0x{0:x}' -f $game.ProcessorAffinity.ToInt64()
+        $observedAffinity[$effectiveAffinity] = $true
+        $writer.WriteLine(('{0:F3},{1:F3},{2},{3},{4}' -f $timer.Elapsed.TotalSeconds,
+            $game.TotalProcessorTime.TotalSeconds, $game.WorkingSet64, $game.Threads.Count, $effectiveAffinity))
         Start-Sleep -Milliseconds 500
     }
     if (-not $game.HasExited) { $stoppedAtLimit = $true; $game.Kill() }
@@ -150,6 +165,7 @@ try {
     if ($telemetry -and -not $telemetry.HasExited) { $telemetry.Kill(); $telemetry.WaitForExit() }
     $configuration.stopped_at_limit = $stoppedAtLimit
     $configuration.finished = (Get-Date).ToString('o')
+    $configuration.observed_cpu_affinity_masks = @($observedAffinity.Keys | Sort-Object)
     $configuration | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $runRoot 'run.json') -Encoding utf8
 }
 Write-Host 'Compare scene readbacks before interpreting timings. These runs do not lock matchup or camera.'
